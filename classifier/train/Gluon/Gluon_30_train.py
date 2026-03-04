@@ -161,9 +161,7 @@ def main():
     MODELS_DIR = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos"
     csv_path = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/confirmed_umbrales_ciclones.csv"
     OUT_DIR = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos/Gluon"
-    eval_dir = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/Gluon/evaluaciones"
     os.makedirs(OUT_DIR, exist_ok=True)
-    os.makedirs(eval_dir, exist_ok=True)
 
     df = pd.read_csv(csv_path, parse_dates = ['fecha_prediccion'])
 

@@ -1,13 +1,8 @@
-# clasificador XGBoosting que identifica por el num de trayectorias y la dispersion cuando un ciclón es maduro o no
+# clasificador SVM que identifica por el num de trayectorias y la dispersion cuando un ciclón es maduro o no
 #con label confirmed
 # Entrena 30 clasificadores, escoje el mejor y lo guarda como Best_XGB_classiffier_seed_{best_seed}.pkl
 # Los otros 30 clasificadores tambien los guarda para hacer con ellos un ensamble
 # En este archivo solo se hace el entrenamiento 
-#cycle learning rate onecyclLR
-#pytorch
-#ya me autprizó para hacerlo en tensor flow
-#Mejor modelo NN-PyTorchOptuna (sin el onecyclLR): seed=20 con AUC-PR=0.794
-
 
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
@@ -122,9 +117,9 @@ def main():
     print('no pertenecen:' ,set(sids)- set(unique_sids))
     """
     out_dir = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos/SVM"
-    eval_dir = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/SVM/evaluaciones"
+    best_dir = '/home/nathaliealvarez/Personal/Repos/TC_detection/classifier/train/SVM/best'
     os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(eval_dir, exist_ok=True)
+    os.makedirs(best_dir, exist_ok=True)
 
     best_score_pr = -np.inf
     best_model = None
@@ -175,11 +170,6 @@ def main():
         probs = final_model.predict_proba(X_test_np)[:, 1]
         auc_roc = roc_auc_score(y_test, probs)
         auc_pr, _, _ = calcula_PR_ascendente(y_test, probs)
-        pd.DataFrame({
-            'seed':     [seed],
-            'auc_roc':  [auc_roc],
-            'auc_pr':   [auc_pr]
-        }).to_csv(f"{eval_dir}/evaluation_seed_{seed}.csv", index=False)
 
         if auc_pr > best_score_pr:
             best_score_pr = auc_pr
@@ -191,12 +181,12 @@ def main():
         print(f"Seed={seed}: AUC-PR={auc_pr:.3f}  AUC-ROC={auc_roc:.3f}")
 
     # Guardar mejor modelo
-    with open(f"/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/SVM/Best_SVM_classifier_seed_{best_seed}.pkl", "wb") as f:
+    with open(os.path.join(best_dir, f'Best_SVM_classifier_seed_{best_seed}.pkl'), "wb") as f:
         pickle.dump({"scaler": best_scaler, "model": best_model, "params": best_params_best}, f)
     print(f"\nMejor modelo SVM-Optuna: seed={best_seed} con AUC-PR={best_score_pr:.3f}")
 
     df_params = pd.DataFrame(params_list)
-    df_params.to_csv(f"/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/SVM/best_params.csv", index=False)
+    df_params.to_csv(os.path.join(best_dir, 'best_params.csv'), index=False)
 
 if __name__ == "__main__":
     main()

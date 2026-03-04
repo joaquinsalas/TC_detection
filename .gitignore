@@ -1,0 +1,4 @@
+# Ignora las carpetas donde se guardan los mejores modelos y configuraciones por algoritmo
+/classifier/train/NN/best
+/classifier/train/SVM/best
+/classifier/train/XGB/best

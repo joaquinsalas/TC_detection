@@ -158,6 +158,11 @@ def main():
     csv_path = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/confirmed_umbrales_ciclones.csv"
     df = pd.read_csv(csv_path, parse_dates = ['fecha_prediccion'])
 
+    out_dir = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos/XGB"
+    best_dir = '/home/nathaliealvarez/Personal/Repos/TC_detection/classifier/train/XGB/best'
+    os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(best_dir, exist_ok=True)
+
     # el clasificador se entrena 30 veces con particiones difeerentes y nos quedamos con el mejor
     records = []            # para acumular resultados
     best_score_roc = -np.inf
@@ -181,21 +186,13 @@ def main():
         clf = refit_with_early_stopping(params, X_train, y_train, seed)
 
         #guarda los clasificadores
-        with open(f"/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos/XGB/XGB_classiffier_seed_{seed}.pkl", "wb") as f:
+        with open(os.path.join(out_dir, f'XGB_classiffier_seed_{seed}.pkll'), "wb") as f:
             pickle.dump(clf, f)
     
         # 2.3) Predicción y métricas
         y_proba = clf.predict_proba(X_test)[:, 1]
         auc_roc = roc_auc_score(y_test, y_proba)
         auc_pr, _, _ = calcula_PR_ascendente(y_test, y_proba)
-        
-        # 2.4) Guardar CSV individual
-        eval_df = pd.DataFrame({
-            'seed':      [seed],
-            'auc_roc':   [auc_roc],
-            'auc_pr':    [auc_pr]
-        })
-        eval_df.to_csv(f"/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/XGB/evaluaciones/evaluation_seed_{seed}.csv", index=False)
 
         # 2.5) Acumular y checar mejor
         if auc_pr > best_score_pr:
@@ -211,13 +208,10 @@ def main():
 
      # 3) Guardar resumen general en Excel
     results_df = pd.DataFrame(records)
-    results_df.to_csv(
-        "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/XGB/best_params.csv",
-        index=False
-    )
+    results_df.to_csv(os.path.join(best_dir, f'best_params.csv'), index=False)
 
     # 4) Guardar mejor clasificador
-    with open(f"/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/XGB/Best_XGB_classiffier_seed_{best_seed}.pkl", "wb") as f:
+    with open(os.path.join(best_dir, f'Best_XGB_classiffier_seed_{best_seed}.pkl'), "wb") as f:
         pickle.dump(best_clf, f)
     print(f"Mejor modelo: seed={best_seed} con AUC-ROC={best_score_roc:.3f} y AUC-PR={best_score_pr:.3f}")
 

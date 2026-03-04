@@ -179,9 +179,10 @@ def main():
     df = pd.read_csv(csv_path, parse_dates = ['fecha_prediccion'])
 
     out_dir = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos/NN"
-    eval_dir = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/NN/evaluaciones"
+    best_dir = '/home/nathaliealvarez/Personal/Repos/TC_detection/classifier/train/NN/best'
     os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(eval_dir, exist_ok=True)
+    os.makedirs(best_dir, exist_ok=True)
+    
 
     best_score_pr = -np.inf
     best_model = None
@@ -250,13 +251,6 @@ def main():
         auc_roc = roc_auc_score(y_test, probs)
         auc_pr, _, _ = calcula_PR_ascendente(y_test, probs)
 
-        # Guardar evaluación
-        pd.DataFrame({
-            'seed':     [seed],
-            'auc_roc':  [auc_roc],
-            'auc_pr':   [auc_pr]
-        }).to_csv(f"{eval_dir}/evaluation_seed_{seed}.csv", index=False)
-
         if auc_pr > best_score_pr:
             best_score_pr = auc_pr
             best_model = final_model
@@ -267,12 +261,13 @@ def main():
         print(f"Seed={seed}: AUC-PR={auc_pr:.3f}  AUC-ROC={auc_roc:.3f}")
 
     # Guardar mejor modelo
-    with open(f"/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/NN/Best_NN_classifier_seed_{best_seed}.pkl", "wb") as f:
+    os.path.join(best_dir, f'Best_NN_classifier_seed_{best_seed}.pkl')
+    with open(os.path.join(best_dir, f'Best_NN_classifier_seed_{best_seed}.pkl'), "wb") as f:
         pickle.dump({"scaler": best_scaler, "model_state": best_model.state_dict(), "params": best_params_best}, f)
     print(f"\nMejor modelo NN-PyTorchOptuna: seed={best_seed} con AUC-PR={best_score_pr:.3f}")
 
     df_params = pd.DataFrame(params_list)
-    df_params.to_csv("/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/NN/best_params.csv", index=False)
+    df_params.to_csv(os.path.join(best_dir, 'best_params.csv'), index=False)
 
 if __name__ == "__main__":
     main()
