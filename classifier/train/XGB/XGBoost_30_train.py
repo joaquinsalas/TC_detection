@@ -6,6 +6,8 @@
 
 #Nota: a este se le agregó también la colmna de zona
 #nota: quitale la columna de zona, es mejor
+#
+
 
 import pickle
 import pandas as pd

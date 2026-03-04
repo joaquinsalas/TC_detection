@@ -3,6 +3,7 @@
 # Entrena 30 clasificadores, escoje el mejor y lo guarda como Best_XGB_classiffier_seed_{best_seed}.pkl
 # Los otros 30 clasificadores tambien los guarda para hacer con ellos un ensamble
 # En este archivo solo se hace el entrenamiento 
+#
 
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"

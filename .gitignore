@@ -2,3 +2,6 @@
 /classifier/train/NN/best
 /classifier/train/SVM/best
 /classifier/train/XGB/best
+
+#ignora los modelos, que son los que más pesan
+/classifier/modelos/
