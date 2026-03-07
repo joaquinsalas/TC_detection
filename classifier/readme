@@ -1,0 +1,3 @@
+Un vez que hayas creado la base de datos podrás ejecutar train/run.py para entrenar todos los clasificadores al mismo tiempo
+
+especificar que en las carpetas 'best' se guarda el meror modelo y la lista de los mejores hiperparámetros encontrados entre los modelos entrenados durante la última ejecución de run.py

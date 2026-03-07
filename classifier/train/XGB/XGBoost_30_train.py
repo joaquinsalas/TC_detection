@@ -1,6 +1,6 @@
 # clasificador XGBoosting que identifica por el num de trayectorias y la dispersion cuando un ciclón es maduro o no
 #con label confirmed
-# Entrena 30 clasificadores, escoje el mejor y lo guarda como Best_XGB_classiffier_seed_{best_seed}.pkl
+# Entrena 30 clasificadores, escoje el mejor y lo guarda como Best_XGB_classifier_seed_{best_seed}.pkl
 # Los otros 30 clasificadores tambien los guarda para hacer con ellos un ensamble
 # En este archivo solo se hace el entrenamiento 
 
@@ -8,21 +8,22 @@
 #nota: quitale la columna de zona, es mejor
 #
 
+#modificar para que no se ejecute el entrenamiento si es que ya están los 30 modelos entrenados
+#modifcar para que empiece a entrenar desde el modelo falttane (si es que ya había otros)
+#falta comentar a inglés
 
 import pickle
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    roc_auc_score,
-    precision_recall_curve, auc
-)
+from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 from sklearn.model_selection import RandomizedSearchCV
 import scipy.stats as stats
 from sklearn.pipeline import Pipeline
-import os, glob
+import os
+from train_common import split_and_preprocess, calcula_PR_ascendente, count_dir
 
 #definición de métodos
 def build_pipeline(random_state=42):
@@ -66,42 +67,6 @@ def refit_with_early_stopping(best_params, X_train, y_train, random_state):
     return pipe
 
 
-def preprocess(df, label, flag, seed = None):
-    if flag =='train':
-        # Balancear clases y normalizar X
-        min_class = df[label].value_counts().min()
-        df_0 = df[df[label] == 0].sample(min_class, random_state=seed)
-        df_1 = df[df[label] == 1].sample(min_class, random_state=seed)
-        df_bal = pd.concat([df_0, df_1]).sample(frac=1, random_state=seed)
-    elif flag == 'test':
-        df_bal = df
-
-    # zona: pacifico=1, atlantico=0
-    #df_bal['zona'] = np.where(df_bal['zona'] == 'pacifico', 1, 0)
-    X = df_bal[["n_trayectorias_best_cluster", "dispersión_km_best_cluster",'horas_diff_estimadas']] #'zona'
-    y = df_bal[label]
-    return X, y
-    
-
-#divide los datos de entrenamiento (2023 y 2024) y test (2025) por fecha
-def split_and_preprocess(df: pd.DataFrame, date_col: str,
-                         train_start: str, train_end: str,
-                         label: str, seed:int):
-    df[date_col] = pd.to_datetime(df[date_col])
-
-    # crear máscara
-    start = pd.to_datetime(train_start)
-    end   = pd.to_datetime(train_end)
-    mask_train = df[date_col].between(start, end)
-
-    # partir DataFrames
-    df_train = df.loc[mask_train].reset_index(drop=True)
-    df_test  = df.loc[~mask_train].reset_index(drop=True)
-    X_train, y_train = preprocess(df_train, label, 'train', seed)
-    X_test,  y_test  = preprocess(df_test,  label, 'test')
-    return X_train, X_test, y_train, y_test
-
-
 def tune_with_random(X_train, y_train, random_state):
     pipe = build_pipeline(random_state=random_state)
     param_dist = {
@@ -129,39 +94,14 @@ def tune_with_random(X_train, y_train, random_state):
     print("Mejores parámetros:", rand.best_params_)
     return rand.best_estimator_, rand.best_params_
 
-# Filtra los valores de Precision y Recall para que conforme el Recall dismiya, Precision aumente (y no decaiga)
-def calcula_PR_ascendente(y_true, y_proba):
-    precision0, recall0, _ = precision_recall_curve(y_true, y_proba)
-    df_pr = pd.DataFrame({
-        'recall':    recall0,
-        'precision': precision0
-    }).sort_values('recall', ascending=False).reset_index(drop=True)
-
-    #Filtrar para que precision nunca baje
-    prec_prev = 0.0
-    mask = []
-    for p in df_pr['precision']:
-        if p >= prec_prev:
-            mask.append(True)
-            prec_prev = p
-        else:
-            mask.append(False)
-    df_pr_f = df_pr[mask]
-
-    recall_f = df_pr_f['recall'].values
-    precision_f = df_pr_f['precision'].values
-
-    #Calcular AUC-PR de la curva escalonada
-    return auc(recall_f, precision_f), recall_f, precision_f
-
 # main ------------------------------------------------------------------------
-def main():
+def main(train_n):
     # Leer el CSV
-    csv_path = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/confirmed_umbrales_ciclones.csv"
+    csv_path = "database_creation/confirmed_umbrales_ciclones.csv"
     df = pd.read_csv(csv_path, parse_dates = ['fecha_prediccion'])
 
-    out_dir = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos/XGB"
-    best_dir = '/home/nathaliealvarez/Personal/Repos/TC_detection/classifier/train/XGB/best'
+    out_dir = "classifier/modelos/XGB"
+    best_dir = 'classifier/train/XGB/best'
     os.makedirs(out_dir, exist_ok=True)
     os.makedirs(best_dir, exist_ok=True)
 
@@ -171,7 +111,9 @@ def main():
     best_score_pr = -np.inf
     best_clf   = None
     best_seed  = None
-    seeds_list = list(range(30))
+
+    last_seed = count_dir(out_dir)
+    seeds_list = list(range(last_seed, train_n))
     for seed in seeds_list:
         # Train-test split
         X_train, X_test, y_train, y_test = split_and_preprocess(
@@ -188,7 +130,7 @@ def main():
         clf = refit_with_early_stopping(params, X_train, y_train, seed)
 
         #guarda los clasificadores
-        with open(os.path.join(out_dir, f'XGB_classiffier_seed_{seed}.pkll'), "wb") as f:
+        with open(os.path.join(out_dir, f'XGB_classifier_seed_{seed}.pkl'), "wb") as f:
             pickle.dump(clf, f)
     
         # 2.3) Predicción y métricas
@@ -209,14 +151,15 @@ def main():
         records.append(record)
 
      # 3) Guardar resumen general en Excel
-    results_df = pd.DataFrame(records)
-    results_df.to_csv(os.path.join(best_dir, f'best_params.csv'), index=False)
 
     # 4) Guardar mejor clasificador
-    with open(os.path.join(best_dir, f'Best_XGB_classiffier_seed_{best_seed}.pkl'), "wb") as f:
-        pickle.dump(best_clf, f)
-    print(f"Mejor modelo: seed={best_seed} con AUC-ROC={best_score_roc:.3f} y AUC-PR={best_score_pr:.3f}")
+    if best_seed is not None:
+        with open(os.path.join(best_dir, f'Best_XGB_classifier_seed_{best_seed}.pkl'), "wb") as f:
+            pickle.dump(best_clf, f)
+        print(f"Mejor modelo XGB: seed={best_seed} con AUC-ROC={best_score_roc:.3f} y AUC-PR={best_score_pr:.3f}")
 
+        results_df = pd.DataFrame(records)
+        results_df.to_csv(os.path.join(best_dir, f'best_params.csv'), index=False)
 
 if __name__ == "__main__":
-    main()
+    main(train_n)
