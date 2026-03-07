@@ -1,5 +1,5 @@
 # este es el mero mero para NN
-#
+#falta comentarlo en inglés
 
 import os
 import pickle
@@ -7,13 +7,13 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score, average_precision_score, precision_recall_curve, auc
+from sklearn.metrics import roc_auc_score
 import optuna
 from sklearn.model_selection import StratifiedKFold
+from train_common import split_and_preprocess, calcula_PR_ascendente, count_dir
 
 # --- Red neuronal en PyTorch ---
 class FlexibleNN(nn.Module):
@@ -82,40 +82,6 @@ def entrenar_modelo(X, y, X_val, y_val, hidden_dims, dropout, activation_name, l
     model.load_state_dict(best_state)
     return model, X_val_t
 
-def preprocess(df, label, flag, seed = None):
-    if flag =='train':
-        # Balancear clases y normalizar X
-        min_class = df[label].value_counts().min()
-        df_0 = df[df[label] == 0].sample(min_class, random_state=seed)
-        df_1 = df[df[label] == 1].sample(min_class, random_state=seed)
-        df_bal = pd.concat([df_0, df_1]).sample(frac=1, random_state=seed)
-    elif flag == 'test':
-        df_bal = df
-
-    # zona: pacifico=1, atlantico=0
-    #df_bal['zona'] = np.where(df_bal['zona'] == 'pacifico', 1, 0)
-    X = df_bal[["n_trayectorias_best_cluster", "dispersión_km_best_cluster",'horas_diff_estimadas']] #zona
-    y = df_bal[label]
-    return X, y
-    
-
-#divide los datos de entrenamiento (2023 y 2024) y test (2025) por fecha
-def split_and_preprocess(df: pd.DataFrame, date_col: str,
-                         train_start: str, train_end: str,
-                         label: str, seed:int):
-    df[date_col] = pd.to_datetime(df[date_col])
-
-    # crear máscara
-    start = pd.to_datetime(train_start)
-    end   = pd.to_datetime(train_end)
-    mask_train = df[date_col].between(start, end)
-
-    # partir DataFrames
-    df_train = df.loc[mask_train].reset_index(drop=True)
-    df_test  = df.loc[~mask_train].reset_index(drop=True)
-    X_train, y_train = preprocess(df_train, label, 'train', seed)
-    X_test,  y_test  = preprocess(df_test,  label, 'test')
-    return X_train, X_test, y_train, y_test
 
 # -------------- Optuna Objective -------------
 def objective(trial, X, y,n_folds):
@@ -149,38 +115,13 @@ def objective(trial, X, y,n_folds):
     return np.mean(auc_prs)
 
 
-# Filtra los valores de Precision y Recall para que conforme el Recall dismiya, Precision aumente (y no decaiga)
-def calcula_PR_ascendente(y_true, y_proba):
-    precision0, recall0, _ = precision_recall_curve(y_true, y_proba)
-    df_pr = pd.DataFrame({
-        'recall':    recall0,
-        'precision': precision0
-    }).sort_values('recall', ascending=False).reset_index(drop=True)
-
-    #Filtrar para que precision nunca baje
-    prec_prev = 0.0
-    mask = []
-    for p in df_pr['precision']:
-        if p >= prec_prev:
-            mask.append(True)
-            prec_prev = p
-        else:
-            mask.append(False)
-    df_pr_f = df_pr[mask]
-
-    recall_f = df_pr_f['recall'].values
-    precision_f = df_pr_f['precision'].values
-
-    #Calcular AUC-PR de la curva escalonada
-    return auc(recall_f, precision_f), recall_f, precision_f
-
 # main ------------------------------------------------------------------------
-def main():
-    csv_path = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/confirmed_umbrales_ciclones.csv"
+def main(train_n):
+    csv_path = "database_creation/confirmed_umbrales_ciclones.csv"
     df = pd.read_csv(csv_path, parse_dates = ['fecha_prediccion'])
 
-    out_dir = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos/NN"
-    best_dir = '/home/nathaliealvarez/Personal/Repos/TC_detection/classifier/train/NN/best'
+    out_dir = "classifier/modelos/NN"
+    best_dir = 'classifier/train/NN/best'
     os.makedirs(out_dir, exist_ok=True)
     os.makedirs(best_dir, exist_ok=True)
     
@@ -190,11 +131,14 @@ def main():
     best_scaler = None
     best_seed = None
     best_params = None
+    best_params_best = None
     params_list = []
     n_folds = 5
 
 
-    for seed in range(30):
+    last_seed = count_dir(out_dir)
+    seeds_list = list(range(last_seed, train_n))
+    for seed in seeds_list:
         print(f"\n=== SEMILLA {seed} ===")
         X_train, X_test, y_train, y_test = split_and_preprocess(
             df, 'fecha_prediccion', '2023-01-01', '2024-12-31', 'label', seed
@@ -262,13 +206,13 @@ def main():
         print(f"Seed={seed}: AUC-PR={auc_pr:.3f}  AUC-ROC={auc_roc:.3f}")
 
     # Guardar mejor modelo
-    os.path.join(best_dir, f'Best_NN_classifier_seed_{best_seed}.pkl')
-    with open(os.path.join(best_dir, f'Best_NN_classifier_seed_{best_seed}.pkl'), "wb") as f:
-        pickle.dump({"scaler": best_scaler, "model_state": best_model.state_dict(), "params": best_params_best}, f)
-    print(f"\nMejor modelo NN-PyTorchOptuna: seed={best_seed} con AUC-PR={best_score_pr:.3f}")
+    if best_params_best is not None:
+        with open(os.path.join(best_dir, f'Best_NN_classifier_seed_{best_seed}.pkl'), "wb") as f:
+            pickle.dump({"scaler": best_scaler, "model_state": best_model.state_dict(), "params": best_params_best}, f)
+        print(f"\nMejor modelo NN-PyTorchOptuna: seed={best_seed} con AUC-PR={best_score_pr:.3f}")
 
-    df_params = pd.DataFrame(params_list)
-    df_params.to_csv(os.path.join(best_dir, 'best_params.csv'), index=False)
+        df_params = pd.DataFrame(params_list)
+        df_params.to_csv(os.path.join(best_dir, 'best_params.csv'), index=False)
 
 if __name__ == "__main__":
-    main()
+    main(train_n)

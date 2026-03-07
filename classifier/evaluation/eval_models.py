@@ -2,16 +2,6 @@
 #con label confirmed
 # En este archivo solo se hacen las evaluaciones y se generan métricas
 
-#Con este script se hizo el 'best' que se usará en el ensamble ahora mismo, pero el mejor creo que será el que saldrá de los 'funciona'
-
-"""
-== Métricas para NN antes de poner el OnecyclLR==
-Mean ROC AUC : 0.8864988772455089
-Std  ROC AUC : 0.015386599576413761
-Mean PR  AUC : 0.7303845784332847
-Std  PR  AUC : 0.044609044661187
-"""
-
 import pickle
 import pandas as pd
 import numpy as np
@@ -21,11 +11,10 @@ from sklearn.metrics import (
 )
 import matplotlib.pyplot as plt
 import os
-from Gluon_30_train import split_and_preprocess, calcula_PR_ascendente, FlexibleNN, predict_with_model
+from classifier.train.Gluon.Gluon_30_train import predict_with_model, nn_bundle_predict_proba, svm_bundle_predict_proba
+from classifier.train_common import split_and_preprocess, calcula_PR_ascendente
+from classifier.train.NN.NN_30_train import FlexibleNN
 import re
-import torch
-import torch.nn as nn
-import numpy as np
 import seaborn as sns
 from autogluon.tabular import TabularPredictor
 import glob
@@ -35,41 +24,6 @@ from sklearn.metrics import precision_recall_curve
 plt.style.use("dark_background")
 color_graph = 'black'
 
-def nn_bundle_predict_proba(nn_bundle, X_test):
-    """nn_bundle: dict con keys 'scaler', 'model_state', 'params'."""
-    scaler = nn_bundle["scaler"]
-    state_dict = nn_bundle["model_state"]
-    params = nn_bundle["params"]
-
-    # Asegura numpy 2D
-    X_np = X_test.values if hasattr(X_test, "values") else X_test
-    Xs = scaler.transform(X_np)  # usa el scaler guardado en el bundle
-
-    # Reconstruir la arquitectura exacta
-    input_dim = Xs.shape[1]
-    n_layers = params.get("n_layers", 1)
-    hidden_dims = [params.get(f"n_units_layer_{i}", 64) for i in range(n_layers)]
-    dropout = params.get("dropout", 0.0)
-    activation_name = params.get("activation", "relu")
-
-    model = FlexibleNN(input_dim=input_dim, hidden_dims=hidden_dims, dropout=dropout, activation_name=activation_name)
-    model.load_state_dict(state_dict, strict=True)
-    model.eval()
-
-    with torch.no_grad():
-        logits = model(torch.tensor(Xs, dtype=torch.float32)).squeeze(1)
-        probas = torch.sigmoid(logits).cpu().numpy()
-    return probas
-
-def svm_bundle_predict_proba(svm_bundle, X_test):
-    scaler = svm_bundle["scaler"]
-    model = svm_bundle["model"]
-
-    # Asegura numpy 2D
-    X_np = X_test.values if hasattr(X_test, "values") else X_test
-    Xs = scaler.transform(X_np)
-    probas = model.predict_proba(Xs)[:, 1]
-    return probas
 
 #definición de métodos
 

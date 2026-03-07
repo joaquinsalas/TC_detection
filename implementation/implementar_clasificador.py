@@ -2,7 +2,7 @@
 
 import pandas as pd
 from autogluon.tabular import TabularPredictor
-import os
+import os, glob
 import torch
 import torch.nn as nn
 import numpy as np
@@ -10,6 +10,7 @@ import pickle
 import re
 import cv2
 import ee
+import json
 
 from datetime import datetime, timedelta
 
@@ -43,13 +44,15 @@ class FlexibleNN(nn.Module):
         return self.net(x)
 
 class ClasificadorHurakan:
-    NN_seeds=[17,3,11] #modelos 0, 1, 2
-    XGB_seeds=[0,4,19] #modelos 3, 4, 5
-    SVM_seeds=[4,28,26] #modelos 6, 7, 8
-    models_seeds = [NN_seeds, XGB_seeds, SVM_seeds]
+    #NN_seeds=[17,3,11] #modelos 0, 1, 2
+    #XGB_seeds=[0,4,19] #modelos 3, 4, 5
+    #SVM_seeds=[4,28,26] #modelos 6, 7, 8
     names = ['NN', 'XGB', 'SVM']
-    def __init__(self):
-        pass
+    def __init__(self, NN_seeds, XGB_seeds, SVM_seeds):
+        self.NN_seeds = NN_seeds
+        self.XGB_seeds = XGB_seeds
+        self.SVM_seeds = SVM_seeds
+        self.models_seeds = [NN_seeds, XGB_seeds, SVM_seeds]
 
     def nn_bundle_predict_proba(self, nn_bundle, X_test):
         """nn_bundle: dict con keys 'scaler', 'model_state', 'params'."""
@@ -243,13 +246,21 @@ def extract_features(storm_id):
 
     generar_video_cronologico("/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/figures_black/mapas_clasif", f"clasif_timelapse_{storm_name}.mp4", fps=2)
 
+#lee el archivo json donde se guardaron en orden las semillas de los modelos individuales para replicar el mejor ensamble autogluon
+def load_base_model_seeds(json_path):
+    with open(json_path, "r") as f:
+        seeds_dict = json.load(f)
+    NN_seeds  = seeds_dict["NN"]
+    XGB_seeds = seeds_dict["XGB"]
+    SVM_seeds = seeds_dict["SVM"]
+
+    return NN_seeds, XGB_seeds, SVM_seeds
 
 
-
-
-def main(storm_id):
-    ensemble_dir = '/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos/Gluon/ensemble_seed_2'
-    models_dir = '/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/classifier/modelos_ensamble'
+def main(storm_id=None):
+    ensemble_dir = glob.glob("implementation/trained_ensemble/ensemble_seed_*")[0]
+    models_dir = 'implementation/trained_ensemble/modelos_ensamble'
+    json_dir = 'implementation/trained_ensemble/base_models_seeds.json'
 
     #Extraer 
     if storm_id: 
@@ -262,13 +273,18 @@ def main(storm_id):
         df = pd.DataFrame(cluster_features)
 
         #crea el objeto
-        clasificador = ClasificadorHurakan()
+        NN_seeds, XGB_seeds, SVM_seeds = load_base_model_seeds(json_dir)
+        clasificador = ClasificadorHurakan(
+            NN_seeds,
+            XGB_seeds,
+            SVM_seeds
+        )
         probabilidades, resultado_final = clasificador.clasificar(df, ensemble_dir, models_dir) 
         print("Probailidades del clasificador:\n", probabilidades)
-        print("Predicción final:", resultado_final)
+        print("Predicción final:", resultado_final[0])
 
 
 
 if __name__ == "__main__":
     storm_id = '2024181N09320' #BERYL
-    main(storm_id)
+    main()

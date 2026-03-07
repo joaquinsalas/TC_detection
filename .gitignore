@@ -5,3 +5,6 @@
 
 #ignora los modelos, que son los que más pesan
 /classifier/modelos/
+
+#ignora el nuevo best atugluon ensemble que se entrene por el usuario
+/implementation/trained_ensemble
