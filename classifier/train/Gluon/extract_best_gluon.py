@@ -107,7 +107,6 @@ def preparar_implementation(best_autogluon_dir,seeds_dict, selected_files, best_
     destination = os.path.join(implementation_dir, f"ensemble_seed_{best_seed}")
     if os.path.exists(destination):
         shutil.rmtree(destination)
-        classifier/modelos/Gluon
     shutil.copytree(best_autogluon_dir, destination)
 
 def extract_seed(filepath):
@@ -134,7 +133,7 @@ def generate_test_preds_for_gluon_ensembles(
     label='label', n_seeds=30):
 
     for seed in range(n_seeds):
-        print(f"\n=== SEMILLA {seed} ===")
+        #print(f"\n=== SEMILLA {seed} ===")
         # 1. Split como en entrenamiento
         _, X_test, _, y_test = split_and_preprocess(
             df, 'fecha_prediccion', '2023-01-01', '2024-12-31', label, seed

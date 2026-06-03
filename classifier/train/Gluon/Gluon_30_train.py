@@ -87,7 +87,7 @@ def main(train_n):
 
         # 1. Selecciona 3 modelos de cada tipo al azar
         NN_files  = glob.glob(os.path.join(f'{MODELS_DIR}/NN', "NN_classifier_seed_*.pkl"))
-        XGB_files = glob.glob(os.path.join(f'{MODELS_DIR}/XGB', "XGB_classiffier_seed_*.pkl"))
+        XGB_files = glob.glob(os.path.join(f'{MODELS_DIR}/XGB', "XGB_classifier_seed_*.pkl"))
         SVM_files = glob.glob(os.path.join(f'{MODELS_DIR}/SVM', "SVM_classifier_seed_*.pkl"))
         NN_sel  = np.random.RandomState(seed).choice(NN_files,  3, replace=False)
         XGB_sel = np.random.RandomState(seed).choice(XGB_files, 3, replace=False)

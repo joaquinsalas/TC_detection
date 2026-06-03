@@ -5,33 +5,36 @@
 #nota curiosa: dupliqué los registros de 2025146N10264 en el TC_names_insside y por ende también en umbrales_ciclones.csv
 
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 import os
-import re
 import pandas as pd
-from pathlib import Path
-from cluster_analysis import ClusterTCStitchNodes, create_data_folder, dibuja_clusters
+from cluster_analysis import ClusterTCStitchNodes, create_data_folder
+from best_tcs.best_tcs import clasificar_region_trayectoria
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from collections import defaultdict
-import ee
 from matplotlib.dates import num2date
+from config import stitch_nodes_dir
+import geopandas as gpd
+from shapely.prepared import prep
 
 # Estilo oscuro (no te olvides de cambiar tambie los colores en plot_evolucion())
 plt.style.use("dark_background")
 
 
-base_dir= '/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan'
-umbrales_csv_path= f'{base_dir}/umbrales_ciclones_black.csv'
-sid_txt_path = f'{base_dir}/TC_names_inside.txt'
-tracks_csv_path = "/home/nathaliealvarez/Personal/databases/ibtracs.last3years.list.v04r01.csv"
+base_dir= 'database_creation'
+umbrales_csv_path= os.path.join(base_dir, 'umbrales_ciclones.csv')
+sid_txt_path = os.path.join(base_dir, 'best_tcs/TC_names_inside.txt')
+tracks_csv_path = os.path.join(base_dir, 'data/ibtracs.ALL.list.v04r01.csv')
 
-# Cargar los polígonos
-ee.Initialize()
-pacific_fc = ee.FeatureCollection("projects/ee-salas/assets/pacifico")
-atlantic_fc = ee.FeatureCollection("projects/gencastnathalie/assets/atlantico_extended_v2")
+#carga los polígnos para cada área
+pacific_gdf = gpd.read_file("database_creation/data/shp_files/pacifico_shp/pacifico_shp.shp")
+atlantic_gdf = gpd.read_file("database_creation/data/shp_files/atlantico_shp/atlantico_shp.shp")
+pacific_geom = pacific_gdf.unary_union
+atlantic_geom = atlantic_gdf.unary_union
+pacific_prepared = prep(pacific_geom)
+atlantic_prepared = prep(atlantic_geom)
 
 # grid:
 valores_distancia = [400, 300, 200, 100, 50]
@@ -98,7 +101,7 @@ def plot_evolucion(df_stats, storm_name, fecha_inicio):
     plt.title(f"Number of trajectories and dispersion of predicted clusters for {storm_name}", color="white") #black
     plt.tight_layout()
     plt.savefig(
-        f"{base_dir}/figures_black/stats_{storm_name}.png",
+        os.path.join(base_dir, f'figures/stats_{storm_name}.png'),
         dpi=300,
         bbox_inches="tight",
     )
@@ -293,29 +296,6 @@ def data_umbrales(start_date, end_date, stitch_dir, df, storm_name):
     else:
         print(f"No se encontraron clusters válidos para {storm_name}. No se genera figura.")
 
-    
-
-def clasificar_region_trayectoria(lat_lon_list):
-    """Devuelve 'pacifico', 'atlantico' o None dependiendo del área predominante"""
-    #carga los polígnos para cada área
-    pacific_geom = pacific_fc.geometry()
-    atlantic_geom = atlantic_fc.geometry()
-
-    total = len(lat_lon_list)
-    pacific_count = 0
-    atlantic_count = 0
-
-    for lat, lon in lat_lon_list:
-        point = ee.Geometry.Point([lon, lat])
-        if pacific_geom.contains(point).getInfo():
-            pacific_count += 1
-        elif atlantic_geom.contains(point).getInfo():
-            atlantic_count += 1
-
-    if pacific_count > atlantic_count:
-        return "pacifico"
-    else:
-        return "atlantico"
 
 def grid_search_umbral(tool, data_folder, file_pattern, df_obs, valores_distancia, valores_min_n):
     best_params = None
@@ -377,34 +357,40 @@ def grid_search_umbral(tool, data_folder, file_pattern, df_obs, valores_distanci
 
 
 # main #############################################
-dias_previos = 10
-df = pd.read_csv(
-    tracks_csv_path,
-    usecols=["NAME", "ISO_TIME", "LAT", "LON", "SID", "USA_SSHS"],
-    dtype={"LAT": float, "LON": float},
-    skiprows=[1],
-    parse_dates=["ISO_TIME"],
-)
+def main():
+    dias_previos = 10
+    df = pd.read_csv(
+        tracks_csv_path,
+        usecols=["NAME", "ISO_TIME", "LAT", "LON", "SID", "USA_SSHS"],
+        dtype={"LAT": float, "LON": float},
+        skiprows=[1],
+        parse_dates=["ISO_TIME"],
+    )
 
-# Leer SIDs del archivo
-with open(sid_txt_path) as f:
-    sids = [line.strip() for line in f if line.strip()]
+    # Leer SIDs del archivo
+    with open(sid_txt_path) as f:
+        sids = [line.strip() for line in f if line.strip()]
 
-for sid in sids:
-    df_sid = df[df["SID"] == sid] # sid
-    if df_sid.empty:
-        continue
+    for sid in sids:
+        df_sid = df[df["SID"] == sid] # sid
+        if df_sid.empty:
+            continue
 
-    #obtiene la región de donde proviene la trayectoria ['pacifico', 'atlantico']
-    coords = list(zip(df_sid["LAT"], df_sid["LON"]))
-    zona = clasificar_region_trayectoria(coords)
-    #zona = "atlantico"
-    stitch_dir = f"/mnt/externo8T/HurricaneData/analisis_maps/stitches/{zona}/nodes_stitch"
-    
-    # extrae el nombre, la fecha de inicio y fin de la tormenta en cuestión
-    storm_name = df_sid["NAME"].iloc[0]
-    start_date = df_sid["ISO_TIME"].min() - timedelta(days=dias_previos)
-    end_date = df_sid["ISO_TIME"].max()
+        #obtiene la región de donde proviene la trayectoria ['pacifico', 'atlantico']
+        coords = list(zip(df_sid["LAT"], df_sid["LON"]))
+        zona = clasificar_region_trayectoria(coords, pacific_prepared, atlantic_prepared)
+        #zona = "atlantico"
+        stitch_dir = os.path.join(stitch_nodes_dir, f"{zona}/nodes_stitch_{zona}")
+        #stitch_dir = f"/mnt/externo8T/HurricaneData/analisis_maps/stitches/{zona}/nodes_stitch"
+        
+        # extrae el nombre, la fecha de inicio y fin de la tormenta en cuestión
+        storm_name = df_sid["NAME"].iloc[0]
+        start_date = df_sid["ISO_TIME"].min() - timedelta(days=dias_previos)
+        end_date = df_sid["ISO_TIME"].max()
 
-    #df_sid.set_index("ISO_TIME", inplace=True)  # indexa por tiempo para acelerar los matchs
-    data_umbrales(start_date, end_date, stitch_dir, df_sid, storm_name)
+        #df_sid.set_index("ISO_TIME", inplace=True)  # indexa por tiempo para acelerar los matchs
+        data_umbrales(start_date, end_date, stitch_dir, df_sid, storm_name)
+
+
+if __name__ == "__main__":
+    main()
