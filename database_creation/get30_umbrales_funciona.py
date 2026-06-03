@@ -16,38 +16,25 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import seaborn as sns
-import ee
+from best_tcs.best_tcs import clasificar_region_trayectoria
+import geopandas as gpd
+from shapely.geometry import Point
+from shapely.prepared import prep
 
 plt.style.use("dark_background")
 # 2. Definir los valores de umbrales que nos interesan
 dist_vals = [400, 300, 200, 100, 50]
 min_vals = [5, 10, 15, 20, 30, 40]
 
-def clasificar_region_trayectoria(lat_lon_list, pacific_geom, atlantic_geom):
-    """Devuelve 'pacifico', 'atlantico' o None dependiendo del área predominante"""
-    pacific_count = 0
-    atlantic_count = 0
-
-    for lat, lon in lat_lon_list:
-        point = ee.Geometry.Point([lon, lat])
-        if pacific_geom.contains(point).getInfo():
-            pacific_count += 1
-        elif atlantic_geom.contains(point).getInfo():
-            atlantic_count += 1
-
-    if pacific_count > atlantic_count:
-        return "pacifico"
-    else:
-        return "atlantico"
 
 def identifica_zona(df, df_ibtracs):
-    # Inicializar Earth Engine
-    ee.Initialize()
     #carga los polígnos para cada área
-    pacific_fc = ee.FeatureCollection("projects/ee-salas/assets/pacifico")
-    atlantic_fc = ee.FeatureCollection("projects/ee-salas/assets/atlantico_shp")
-    pacific_geom = pacific_fc.geometry()
-    atlantic_geom = atlantic_fc.geometry()
+    pacific_gdf = gpd.read_file("database_creation/data/shp_files/pacifico_shp/pacifico_shp.shp")
+    atlantic_gdf = gpd.read_file("database_creation/data/shp_files/atlantico_shp/atlantico_shp.shp")
+    pacific_geom = pacific_gdf.unary_union
+    atlantic_geom = atlantic_gdf.unary_union
+    pacific_prepared = prep(pacific_geom)
+    atlantic_prepared = prep(atlantic_geom)
 
     # agrupar df por SIDs
     resultado = []
@@ -57,7 +44,7 @@ def identifica_zona(df, df_ibtracs):
         if df_sid.empty:
             continue
         coords = list(zip(df_sid["LAT"], df_sid["LON"]))
-        zona = clasificar_region_trayectoria(coords, pacific_geom, atlantic_geom)
+        zona = clasificar_region_trayectoria(coords, pacific_prepared, atlantic_prepared)
         resultado.append({"SID": sid, "zona": zona})
 
     return pd.DataFrame(resultado)
@@ -81,14 +68,14 @@ def grafica_umbrales(heatmap_data):
     plt.ylabel('Threshold (distance km, min. trajectories)')
     plt.title('Use of threshold combinations since the start of the cyclone')
     plt.tight_layout()
-    plt.savefig('/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/figures_black/heatmap_umbrales_vs_horas_diff.png', dpi=300)
+    plt.savefig('database_creation/figures/heatmap_umbrales_vs_horas_diff.png', dpi=300)
 
 
 def add_labels(df):
     """
     confirmed: 1 si la fecha en que se hizo la predicción es >= que la fecha oficial del inicio del evento. 0 si es menor
     """
-    csv_path = "/home/nathaliealvarez/Personal/databases/ibtracs.last3years.list.v04r01.csv"
+    csv_path = "database_creation/data/ibtracs.ALL.list.v04r01.csv"
     df_ibtracs = pd.read_csv(csv_path, usecols=["ISO_TIME", "SID","USA_SSHS", 'LAT', 'LON'],parse_dates = ['ISO_TIME'])
     # Asegúrate de que las columnas de fechas están en formato datetime
     df['ISO_TIME'] = pd.to_datetime(df['ISO_TIME'], errors='coerce')
@@ -145,90 +132,92 @@ def limpiar_archivo_umbrales(path):
     #df = df[["SID","NAME","fecha_prediccion","inicio_oficial","horas_diff","umbral_distancia_enlace_km","umbral_min_trayectorias_por_cluster","dispersión_km_best_cluster","n_trayectorias_best_cluster","label"]]
 
     # Guardar el resultado en un nuevo CSV (o sobrescribir si lo deseas)
-    output_path = '/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/confirmed_umbrales_ciclones.csv'
+    output_path = 'database_creation/confirmed_umbrales_ciclones.csv'
     df.to_csv(output_path, index=False)
     return df
 
 
 # main -------------------------------------------------------------------------------------------------------
-# archivo umbrales_ciclones.csv
-path = "/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/umbrales_ciclones.csv" 
-#path = '/home/nathaliealvarez/Personal/umbral_definition/retroalimentaicon_humana/last_updated_umbrales_ciclones.csv' #cambia esto
-df = limpiar_archivo_umbrales(path)
+def main():
+    # archivo umbrales_ciclones.csv
+    path = "database_creation/umbrales_ciclones.csv" 
+    df = limpiar_archivo_umbrales(path)
+    output_path = 'database_creation/confirmed_umbrales_ciclones.csv'
+    df.to_csv(output_path, index=False)
 
-output_path = '/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/confirmed_umbrales_ciclones.csv'
-#output_path = '/home/nathaliealvarez/Personal/umbral_definition/retroalimentaicon_humana/confirmed_umbrales_ciclones_humano.csv' #cambia esto
-df.to_csv(output_path, index=False)
+    #abrir el archivo limpio
+    df = pd.read_csv(output_path)
 
-#abrir el archivo limpio
-df = pd.read_csv(output_path)
+    #una vez guardado, se genera la grafica para el analisis de parejas de umbrales a lo largo del tiempo
+    col_horas_diff = 'horas_diff_estimadas' # diferencia de horas que aparecerán en el eje X
+    # 3. Filtrar el dataframe a las combinaciones deseadas
+    df = df[
+        df['umbral_distancia_enlace_km'].isin(dist_vals) &
+        df['umbral_min_trayectorias_por_cluster'].isin(min_vals)
+    ]
 
-
-#una vez guardado, se genera la grafica para el analisis de parejas de umbrales a lo largo del tiempo
-col_horas_diff = 'horas_diff_estimadas' # diferencia de horas que aparecerán en el eje X
-# 3. Filtrar el dataframe a las combinaciones deseadas
-df = df[
-    df['umbral_distancia_enlace_km'].isin(dist_vals) &
-    df['umbral_min_trayectorias_por_cluster'].isin(min_vals)
-]
-
-# 4. Crear una etiqueta única para cada pareja de umbrales
-df['umbral_combo'] = (
-    df['umbral_distancia_enlace_km'].astype(int).astype(str) + ' km, ' +
-    df['umbral_min_trayectorias_por_cluster'].astype(int).astype(str) + ' traj.'
-)
-
-# 5. Calcular el porcentaje de ocurrencias por combo y horas_diff
-#    Asumimos que el total de casos por cada horas_diff es el mismo para todas las combos;
-#    si no fuera así, habría que normalizar por el total global de cada horas_diff.
-group = df.groupby([col_horas_diff, 'umbral_combo']).size().reset_index(name='count')
-total_per_h = group.groupby(col_horas_diff)['count'].transform('sum')
-group['pct'] = group['count'] / total_per_h * 100
-
-# 6. Pivot para obtener matriz (Y × X) de porcentajes
-heatmap_data = group.pivot(index='umbral_combo', columns=col_horas_diff, values='pct')
-
-# 7. Ordenar filas y columnas si se desea
-#    (por ejemplo, ordenar horas_diff de menor a mayor y combos en el orden de dist_vals/min_vals)
-heatmap_data = heatmap_data.reindex(
-    index=[f"{d} km, {m} traj." for m in min_vals for d in dist_vals],
-    columns=sorted(heatmap_data.columns)
-)
-
-#descomenta esto cuando ya no estés usando retroalimnetacion humana
-# #grafica el heatmap de los umbrales
-grafica_umbrales(heatmap_data)
-
-
-# generar el csv de resumne de mejores umbrales por cada hora ------------------
-# ——— AÑADIDO: Guardar CSV con el combo más frecuente por horas_diff ———
-
-# Partimos del DataFrame 'group' que tiene columnas [col_horas_diff, 'umbral_combo', 'count', 'pct']
-# 1) Para cada horas_diff, elegir el índice donde 'pct' es máximo
-idx_max = group.groupby(col_horas_diff)['pct'].idxmax()
-
-# 2) Extraer sólo las filas ganadoras
-best_combo = group.loc[idx_max].reset_index(drop=True)
-
-# 3) Separar 'umbral_combo' en dos columnas numéricas
-#    Ejemplo de umbral_combo: "400 km, 3 traj."
-best_combo[['umbral_distancia_enlace_km', 'umbral_min_trayectorias_por_cluster']] = (
-    best_combo['umbral_combo']
-    .str.extract(
-        r'(?P<umbral_distancia_enlace_km>\d+(?:\.\d+)?)\s*km,\s*(?P<umbral_min_trayectorias_por_cluster>\d+(?:\.\d+)?)\s*traj\.'
+    # 4. Crear una etiqueta única para cada pareja de umbrales
+    df['umbral_combo'] = (
+        df['umbral_distancia_enlace_km'].astype(int).astype(str) + ' km, ' +
+        df['umbral_min_trayectorias_por_cluster'].astype(int).astype(str) + ' traj.'
     )
-)
 
-# 4) Seleccionar y renombrar las columnas de salida
-salida = best_combo[[col_horas_diff,
-                     'umbral_min_trayectorias_por_cluster',
-                     'umbral_distancia_enlace_km']]
+    # 5. Calcular el porcentaje de ocurrencias por combo y horas_diff
+    #    Asumimos que el total de casos por cada horas_diff es el mismo para todas las combos;
+    #    si no fuera así, habría que normalizar por el total global de cada horas_diff.
+    group = df.groupby([col_horas_diff, 'umbral_combo']).size().reset_index(name='count')
+    total_per_h = group.groupby(col_horas_diff)['count'].transform('sum')
+    group['pct'] = group['count'] / total_per_h * 100
 
-# 5) Guardar en CSV
-# descomenta esto cuando ya no estées usando la retroalimentación humana
-salida.to_csv(
-    '/home/nathaliealvarez/Personal/umbral_definition/umbrales_Hurakan/umbral_combo_ganador_por_hora.csv',
-    index=False
-)
+    # 6. Pivot para obtener matriz (Y × X) de porcentajes
+    heatmap_data = group.pivot(index='umbral_combo', columns=col_horas_diff, values='pct')
 
-print("CSV de combos ganadores guardado en 'umbral_combo_ganador_por_hora.csv'")
+    # 7. Ordenar filas y columnas si se desea
+    #    (por ejemplo, ordenar horas_diff de menor a mayor y combos en el orden de dist_vals/min_vals)
+    heatmap_data = heatmap_data.reindex(
+        index=[f"{d} km, {m} traj." for m in min_vals for d in dist_vals],
+        columns=sorted(heatmap_data.columns)
+    )
+
+    #descomenta esto cuando ya no estés usando retroalimnetacion humana
+    # #grafica el heatmap de los umbrales
+    grafica_umbrales(heatmap_data)
+
+
+    # generar el csv de resumne de mejores umbrales por cada hora ------------------
+    # ——— AÑADIDO: Guardar CSV con el combo más frecuente por horas_diff ———
+
+    # Partimos del DataFrame 'group' que tiene columnas [col_horas_diff, 'umbral_combo', 'count', 'pct']
+    # 1) Para cada horas_diff, elegir el índice donde 'pct' es máximo
+    idx_max = group.groupby(col_horas_diff)['pct'].idxmax()
+
+    # 2) Extraer sólo las filas ganadoras
+    best_combo = group.loc[idx_max].reset_index(drop=True)
+
+    # 3) Separar 'umbral_combo' en dos columnas numéricas
+    #    Ejemplo de umbral_combo: "400 km, 3 traj."
+    best_combo[['umbral_distancia_enlace_km', 'umbral_min_trayectorias_por_cluster']] = (
+        best_combo['umbral_combo']
+        .str.extract(
+            r'(?P<umbral_distancia_enlace_km>\d+(?:\.\d+)?)\s*km,\s*(?P<umbral_min_trayectorias_por_cluster>\d+(?:\.\d+)?)\s*traj\.'
+        )
+    )
+
+    # 4) Seleccionar y renombrar las columnas de salida
+    salida = best_combo[[col_horas_diff,
+                        'umbral_min_trayectorias_por_cluster',
+                        'umbral_distancia_enlace_km']]
+
+    # 5) Guardar en CSV
+    # descomenta esto cuando ya no estées usando la retroalimentación humana
+    salida.to_csv(
+        'database_creation/umbral_combo_ganador_por_hora.csv',
+        index=False
+    )
+
+    print("CSV de combos ganadores guardado en 'umbral_combo_ganador_por_hora.csv'")
+
+    
+if __name__ == "__main__":
+    main()
+

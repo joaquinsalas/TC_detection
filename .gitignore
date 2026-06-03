@@ -8,3 +8,17 @@
 
 #ignora el nuevo best atugluon ensemble que se entrene por el usuario
 /implementation/trained_ensemble
+
+#ignora los mapas de los ciclones de interés
+/database_creation/best_tcs/outside_area
+/database_creation/best_tcs/inside_area
+
+#ignora las figiras que se generan
+/database_creation/figures
+/classifier/fig
+
+#ignora el analisis shap (porque es un proceso más manual que automático en este caso)
+classifier/evaluation/shap
+
+#ignora la base de datos de ibtracs
+/database_creation/data/ibtracs.ALL.list.v04r01.csv
