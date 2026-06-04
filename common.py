@@ -1,11 +1,6 @@
-
-import pandas as pd
-from autogluon.tabular import TabularPredictor
 import os
-import torch
-import pickle
-from classifier.train.NN.NN_30_train import FlexibleNN
 import json
+import shutil
 
 def load_base_model_seeds(json_path):
     with open(json_path, "r") as f:
@@ -27,6 +22,9 @@ class ClasificadorHurakan:
         self.models_seeds = [NN_seeds, XGB_seeds, SVM_seeds]
 
     def nn_bundle_predict_proba(self, nn_bundle, X_test):
+        import torch
+        from classifier.train.NN.NN_30_train import FlexibleNN
+
         """nn_bundle: dict con keys 'scaler', 'model_state', 'params'."""
         scaler = nn_bundle["scaler"]
         state_dict = nn_bundle["model_state"]
@@ -80,6 +78,9 @@ class ClasificadorHurakan:
         return probas
 
     def preprocess_input(self, df, models_dir):
+        import pickle
+        import pandas as pd
+
         files = []
         #usar los clasificadores NN, XGB y SVM para generar el dataset stackeado
         for model_seed_list, name in zip(self.models_seeds, self.names):
@@ -100,6 +101,8 @@ class ClasificadorHurakan:
 
 
     def clasificar(self, df, ensemble_dir, models_dir):
+        from autogluon.tabular import TabularPredictor
+
         #primero obtiene las probabilidades de cada clasificador base
         preds = self.preprocess_input(df, models_dir)
 
@@ -108,3 +111,22 @@ class ClasificadorHurakan:
         probabilidades = predictor.predict_proba(preds)
         resultado_final = predictor.predict(preds)
         return probabilidades, resultado_final
+    
+
+#borra carpetas, si existen, y las vuleve a crear vacías
+def reset_output_paths(dirs=None, files=None):
+    if dirs is None:
+        dirs = []
+    if files is None:
+        files = []
+
+    # Resetear carpetas
+    for directory in dirs:
+        if os.path.isdir(directory):
+            shutil.rmtree(directory)
+        os.makedirs(directory, exist_ok=True)
+
+    # Borrar archivos si existen
+    for file_path in files:
+        if os.path.isfile(file_path):
+            os.remove(file_path)

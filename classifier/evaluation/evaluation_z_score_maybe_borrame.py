@@ -8,9 +8,9 @@ from sklearn.metrics import (
 )
 from autogluon.tabular import TabularPredictor
 import os
-from train.Gluon.Gluon_30_train import predict_with_model
-from train_common import split_and_preprocess, calcula_PR_ascendente
-from evaluation.models_performance import generate_test_preds_for_gluon_ensembles, truncated_mean, nn_bundle_predict_proba, svm_bundle_predict_proba
+from classifier.train.Gluon.Gluon_30_train import predict_with_model
+from classifier.train_common import split_and_preprocess, calcula_PR_ascendente
+from classifier.evaluation.models_performance import generate_test_preds_for_gluon_ensembles, truncated_mean, nn_bundle_predict_proba, svm_bundle_predict_proba
 import numpy as np
 import re
 

@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 import torch
 from autogluon.tabular import TabularPredictor
-from train.NN.NN_30_train import FlexibleNN
-from train_common import split_and_preprocess, count_dir
+from classifier.train.NN.NN_30_train import FlexibleNN
+from classifier.train_common import split_and_preprocess, count_dir
 
 def nn_bundle_predict_proba(nn_bundle, X_test):
     """nn_bundle: dict con keys 'scaler', 'model_state', 'params'."""

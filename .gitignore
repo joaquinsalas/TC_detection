@@ -22,3 +22,7 @@ classifier/evaluation/shap
 
 #ignora la base de datos de ibtracs
 /database_creation/data/ibtracs.ALL.list.v04r01.csv
+
+# ignora bytecode generado por Python
+__pycache__/
+*.py[cod]

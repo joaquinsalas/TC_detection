@@ -23,7 +23,7 @@ from sklearn.metrics import roc_auc_score, average_precision_score, precision_re
 import optuna
 from sklearn.model_selection import StratifiedKFold
 from sklearn.svm import SVC
-from train_common import preprocess, split_and_preprocess, calcula_PR_ascendente, count_dir
+from classifier.train_common import preprocess, split_and_preprocess, calcula_PR_ascendente, count_dir
 
 def entrenar_modelo_svm(X, y, C, kernel, gamma, class_weight, probability):
     clf = SVC(C=C, kernel=kernel, gamma=gamma, class_weight=class_weight, probability=probability, random_state=0)
