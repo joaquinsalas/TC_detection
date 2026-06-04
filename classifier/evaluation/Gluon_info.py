@@ -16,7 +16,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 import os
-from train_common import calcula_PR_ascendente
+from classifier.train_common import calcula_PR_ascendente
 from autogluon.tabular import TabularPredictor
 import glob
 

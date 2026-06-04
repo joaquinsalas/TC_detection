@@ -7,7 +7,8 @@ from datetime import timedelta
 import geopandas as gpd
 from shapely.geometry import Point
 from shapely.prepared import prep
-from config import start_download_date, stop_download_date
+from common import reset_output_paths
+from database_creation.config import start_download_date, stop_download_date
 
 
 # Cargar los polígonos de prueba
@@ -24,9 +25,7 @@ def get_best_tc_maps_and_names(df, sid_txt_path):
     # Prepare output directories
     inside_dir = "database_creation/best_tcs/inside_area"
     outside_dir = "database_creation/best_tcs/outside_area"
-    os.makedirs(inside_dir, exist_ok=True)
-    os.makedirs(outside_dir, exist_ok=True)
-
+    reset_output_paths(dirs=[inside_dir, outside_dir])
 
     # Filter: seasons 2023–2025, NAME != 'UNNAMED', Basins no requeridas
     df = df[
@@ -169,6 +168,7 @@ def generar_fechas_best_tcs(df, sid_txt_path, output_csv_path):
 def main():
     sid_txt_path = "database_creation/best_tcs/TC_names_inside.txt"
     output_csv_path = "database_creation/best_tcs/fechas_best_tcs.csv"
+    reset_output_paths(files=[sid_txt_path, output_csv_path])
 
     # Read the IBTrACS CSV
     csv_path = "database_creation/data/ibtracs.ALL.list.v04r01.csv"

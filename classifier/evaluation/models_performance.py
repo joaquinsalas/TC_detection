@@ -9,8 +9,8 @@ from sklearn.metrics import (
 )
 import matplotlib.pyplot as plt
 import os
-from train.Gluon.Gluon_30_train import predict_with_model, nn_bundle_predict_proba, svm_bundle_predict_proba
-from train_common import split_and_preprocess, calcula_PR_ascendente
+from classifier.train.Gluon.Gluon_30_train import predict_with_model, nn_bundle_predict_proba, svm_bundle_predict_proba
+from classifier.train_common import split_and_preprocess, calcula_PR_ascendente
 import re
 import seaborn as sns
 from autogluon.tabular import TabularPredictor

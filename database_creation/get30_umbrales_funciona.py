@@ -16,10 +16,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import seaborn as sns
-from best_tcs.best_tcs import clasificar_region_trayectoria
+from database_creation.best_tcs.best_tcs import clasificar_region_trayectoria
 import geopandas as gpd
 from shapely.geometry import Point
 from shapely.prepared import prep
+from common import reset_output_paths
 
 plt.style.use("dark_background")
 # 2. Definir los valores de umbrales que nos interesan
@@ -49,8 +50,7 @@ def identifica_zona(df, df_ibtracs):
 
     return pd.DataFrame(resultado)
 
-def grafica_umbrales(heatmap_data):
-    # 8. Dibujo del heatmap
+def grafica_umbrales(heatmap_data, heatmap_output_path):
     plt.figure(figsize=(12, 8))
     sns.heatmap(
         heatmap_data,
@@ -68,7 +68,7 @@ def grafica_umbrales(heatmap_data):
     plt.ylabel('Threshold (distance km, min. trajectories)')
     plt.title('Use of threshold combinations since the start of the cyclone')
     plt.tight_layout()
-    plt.savefig('database_creation/figures/heatmap_umbrales_vs_horas_diff.png', dpi=300)
+    plt.savefig(heatmap_output_path, dpi=300)
 
 
 def add_labels(df):
@@ -113,7 +113,7 @@ def add_labels(df):
     return df_merged
 
 # deja el archivo umbrales_ciclones con las columnas necesarias
-def limpiar_archivo_umbrales(path):
+def limpiar_archivo_umbrales(path, output_path):
     # Leer el archivo CSV
     df = pd.read_csv(path, usecols=["SID","NAME","ISO_TIME","fecha_inicio","distancia_enlace_km","min_trayectorias_por_cluster","n_trayectorias_best_cluster","dispersión_km_best_cluster"],parse_dates = ['ISO_TIME', 'fecha_inicio'])
 
@@ -129,21 +129,20 @@ def limpiar_archivo_umbrales(path):
     # Calcular la cantidad de horas estimadas entre la fecha de predicción y la fecha estimada de inicio
     df['horas_diff_estimadas'] = (df['fecha_prediccion'] - df['fecha_estimada_de_inicio']).dt.total_seconds() / 3600.0  # convertir a horas
 
-    #df = df[["SID","NAME","fecha_prediccion","inicio_oficial","horas_diff","umbral_distancia_enlace_km","umbral_min_trayectorias_por_cluster","dispersión_km_best_cluster","n_trayectorias_best_cluster","label"]]
-
-    # Guardar el resultado en un nuevo CSV (o sobrescribir si lo deseas)
-    output_path = 'database_creation/confirmed_umbrales_ciclones.csv'
+    # Guardar el resultado en un nuevo CSV
     df.to_csv(output_path, index=False)
     return df
 
 
 # main -------------------------------------------------------------------------------------------------------
 def main():
-    # archivo umbrales_ciclones.csv
     path = "database_creation/umbrales_ciclones.csv" 
-    df = limpiar_archivo_umbrales(path)
     output_path = 'database_creation/confirmed_umbrales_ciclones.csv'
-    df.to_csv(output_path, index=False)
+    combo_ganador_output_path= 'database_creation/umbral_combo_ganador_por_hora.csv'
+    heatmap_output_path = 'database_creation/figures/heatmap_umbrales_vs_horas_diff.png'
+    reset_output_paths(files=[output_path, combo_ganador_output_path])
+
+    limpiar_archivo_umbrales(path, output_path)
 
     #abrir el archivo limpio
     df = pd.read_csv(output_path)
@@ -181,7 +180,7 @@ def main():
 
     #descomenta esto cuando ya no estés usando retroalimnetacion humana
     # #grafica el heatmap de los umbrales
-    grafica_umbrales(heatmap_data)
+    grafica_umbrales(heatmap_data, heatmap_output_path)
 
 
     # generar el csv de resumne de mejores umbrales por cada hora ------------------
@@ -211,13 +210,11 @@ def main():
     # 5) Guardar en CSV
     # descomenta esto cuando ya no estées usando la retroalimentación humana
     salida.to_csv(
-        'database_creation/umbral_combo_ganador_por_hora.csv',
+        combo_ganador_output_path,
         index=False
     )
-
-    print("CSV de combos ganadores guardado en 'umbral_combo_ganador_por_hora.csv'")
+    print(f"CSV de combos ganadores guardado en '{combo_ganador_output_path}'")
 
     
 if __name__ == "__main__":
     main()
-

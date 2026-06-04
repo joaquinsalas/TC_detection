@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 import optuna
 from sklearn.model_selection import StratifiedKFold
-from train_common import split_and_preprocess, calcula_PR_ascendente, count_dir
+from classifier.train_common import split_and_preprocess, calcula_PR_ascendente, count_dir
 
 # --- Red neuronal en PyTorch ---
 class FlexibleNN(nn.Module):

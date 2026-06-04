@@ -422,8 +422,10 @@ def create_data_folder(folder_path, base_txt_folder):
     ##print(f"Carpeta creada: {folder_path}")
 
     # Buscar archivos con el patrón nodes_stitch_20240910_06_05.txt
-    patron = os.path.join(base_txt_folder, f"*{timestamp_txt}_??.txt")
-    #patron = os.path.join(base_txt_folder, f"nodes_stitch_{timestamp_txt}_pacifico_??.txt")
+    #patron = os.path.join(base_txt_folder, f"*{timestamp_txt}_??.txt")
+
+    #Buscar archivos con el patrón nodes_stitch_20250224_12_atlantico_08.txt
+    patron = os.path.join(base_txt_folder, f"*{timestamp_txt}_*_??.txt")
     archivos = glob.glob(patron)
     ##print(f"Archivos encontrados: {len(archivos)}")
 

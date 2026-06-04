@@ -21,9 +21,6 @@ from classifier.evaluation.z_test import main as run_z_score
 def main():
     
     color_graph = 'white'
-    if color_graph == 'black':
-        plt.style.use("dark_background")
-    
     warnings.filterwarnings("ignore", category=UserWarning)
     
     print("\n==============================")

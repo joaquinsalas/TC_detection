@@ -3,15 +3,15 @@ import os
 import warnings
 
 # Asegurar que Python pueda encontrar los módulos
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(CURRENT_DIR)
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+sys.path.insert(0, root_dir)
 
 # Importar los scripts
-from train.XGB.XGBoost_30_train import main as run_xgb
-from train.SVM.SVM_30_train import main as run_svm
-from train.NN.NN_30_train import main as run_nn
-from train.Gluon.Gluon_30_train import main as run_gluon
-from train.Gluon.extract_best_gluon import main as run_extract
+from classifier.train.XGB.XGBoost_30_train import main as run_xgb
+from classifier.train.SVM.SVM_30_train import main as run_svm
+from classifier.train.NN.NN_30_train import main as run_nn
+from classifier.train.Gluon.Gluon_30_train import main as run_gluon
+from classifier.train.Gluon.extract_best_gluon import main as run_extract
 
 
 def main():

@@ -23,7 +23,7 @@ from sklearn.model_selection import RandomizedSearchCV
 import scipy.stats as stats
 from sklearn.pipeline import Pipeline
 import os
-from train_common import split_and_preprocess, calcula_PR_ascendente, count_dir
+from classifier.train_common import split_and_preprocess, calcula_PR_ascendente, count_dir
 
 #definición de métodos
 def build_pipeline(random_state=42):

@@ -16,8 +16,8 @@ import numpy as np
 import seaborn as sns
 from autogluon.tabular import TabularPredictor
 import glob
-from train_common import calcula_PR_ascendente, split_and_preprocess
-from train.Gluon.Gluon_30_train import predict_with_model
+from classifier.train_common import calcula_PR_ascendente, split_and_preprocess
+from classifier.train.Gluon.Gluon_30_train import predict_with_model
 import os
 import json
 import shutil

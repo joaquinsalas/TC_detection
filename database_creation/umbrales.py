@@ -8,20 +8,16 @@
 from datetime import timedelta
 import os
 import pandas as pd
-from cluster_analysis import ClusterTCStitchNodes, create_data_folder
-from best_tcs.best_tcs import clasificar_region_trayectoria
+from database_creation.cluster_analysis import ClusterTCStitchNodes, create_data_folder
+from database_creation.best_tcs.best_tcs import clasificar_region_trayectoria
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.dates import num2date
-from config import stitch_nodes_dir
+from database_creation.config import stitch_nodes_dir
 import geopandas as gpd
 from shapely.prepared import prep
-
-# Estilo oscuro (no te olvides de cambiar tambie los colores en plot_evolucion())
-plt.style.use("dark_background")
-
 
 base_dir= 'database_creation'
 umbrales_csv_path= os.path.join(base_dir, 'umbrales_ciclones.csv')
@@ -42,13 +38,26 @@ valores_min_n = [5, 10, 15, 20, 30, 40]
 
 
 # graficar todas las estadísticas en un gráfico
-def plot_evolucion(df_stats, storm_name, fecha_inicio):
+def plot_evolucion(df_stats, storm_name, fecha_inicio, color_graph):
     """
     df_stats debe tener columnas:
       - 'date' (datetime)
       - 'n_trajs' (int)
       - 'start_dispersion_km' (float)
     """
+
+    #establece el patron de colores
+    color_dips = 'green'
+    if color_graph == 'black':
+        plt.style.use("dark_background")
+        color_trajs = "yellow"
+        color_lines = "white"
+    else: 
+        plt.style.use("default")
+        color_trajs = "purple"
+        color_lines = "black"
+
+
     # Copia y reemplaza 0 por NaN
     df = df_stats.copy()
     df["n_trajs"] = df["n_trajs"].replace(0, np.nan)
@@ -59,14 +68,14 @@ def plot_evolucion(df_stats, storm_name, fecha_inicio):
     ax1.plot(
         df["date"],
         df["n_trajs"],
-        color="yellow", #orange
+        color=color_trajs,
         marker="o",
         linestyle="-",
         label="Nº trajectories",
     )
-    ax1.set_ylabel("Number of trajectories", color="yellow") #black
+    ax1.set_ylabel("Number of trajectories", color=color_trajs)
     ax1.set_ylim(0, 55)
-    ax1.tick_params(axis="y", labelcolor="yellow") # black
+    ax1.tick_params(axis="y", labelcolor=color_trajs)
     ax1.grid(True, which="both", linestyle=":", linewidth=0.5, alpha=0.3)
 
     # Configurar ticks X cada 6 horas
@@ -79,18 +88,18 @@ def plot_evolucion(df_stats, storm_name, fecha_inicio):
     ax2.plot(
         df["date"],
         df["start_dispersion_km"],
-        color="green",
+        color=color_dips,
         marker="o",
         linestyle="-",
         label="Initial dispersion",
     )
-    ax2.set_ylabel("Initial dispersion (km)", color="green") #black
+    ax2.set_ylabel("Initial dispersion (km)", color=color_dips) 
     ax2.set_ylim(0, 400)
-    ax2.tick_params(axis="y", labelcolor="green") #black (pero el verde clarito)
+    ax2.tick_params(axis="y", labelcolor=color_dips)
     ax2.grid(True, which="both", linestyle=":", linewidth=0.5, alpha=0.3)
 
     # Línea vertical blanca para la fecha de inicio en IBTrACS --------------------------------------------------
-    ax1.axvline(fecha_inicio, color='white', linestyle='--', linewidth=2, label='Cyclogenesis start date') #black
+    ax1.axvline(fecha_inicio, color=color_lines, linestyle='--', linewidth=2, label='Cyclogenesis start date')
 
     # Leyenda conjunta
     lines1, labels1 = ax1.get_legend_handles_labels()
@@ -98,7 +107,7 @@ def plot_evolucion(df_stats, storm_name, fecha_inicio):
     ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
 
     ax1.set_xlabel("Date")
-    plt.title(f"Number of trajectories and dispersion of predicted clusters for {storm_name}", color="white") #black
+    plt.title(f"Number of trajectories and dispersion of predicted clusters for {storm_name}", color=color_lines)
     plt.tight_layout()
     plt.savefig(
         os.path.join(base_dir, f'figures/stats_{storm_name}.png'),
@@ -152,6 +161,7 @@ def get_clusters(current, storm_name, cont, stitch_dir, df):
         f"{current:%Y_%m_%d}_{current.hour:02d}_nodes_ens"  # generado en base a current
     )
     # file_name = '2025_06_10_18_nodes_ens' # generado en base a current
+    #file_name= 'nodes_stitch_20250224_12_atlantico_08.txt'
     data_path = os.path.join(base_dir, file_name) 
     create_data_folder(
         data_path, stitch_dir
@@ -199,7 +209,7 @@ def get_clusters(current, storm_name, cont, stitch_dir, df):
 #   si es así, añade 1 un contador
 #   al final debe decir 'en el ensamble del día_hora se encontraron n coincidencias con uno de los puntos de dalila
 
-def data_umbrales(start_date, end_date, stitch_dir, df, storm_name):
+def data_umbrales(start_date, end_date, stitch_dir, df, storm_name, color_graph):
     umbrales_list = []
     TIME_STEP = timedelta(hours=6)
 
@@ -217,7 +227,7 @@ def data_umbrales(start_date, end_date, stitch_dir, df, storm_name):
         # ---------------------------------------------------------------------
         best_cluster, clusters, tool, best_params, best_error = get_clusters(
             current, storm_name, cont, stitch_dir, df
-        )#if np.float64(nan)...
+        )
         if best_params is not None and clusters is not None: # si hubo culauwier cluster
             d, min_n = best_params
             storm_sid = df["SID"].iloc[0]
@@ -292,7 +302,7 @@ def data_umbrales(start_date, end_date, stitch_dir, df, storm_name):
         df_stats = df_stats.sort_values("date")
         #start_date = df["ISO_TIME"].min() 
         start_date = df.loc[df["USA_SSHS"] >= 0, "ISO_TIME"].min()
-        plot_evolucion(df_stats, storm_name, start_date)
+        plot_evolucion(df_stats, storm_name, start_date, color_graph)
     else:
         print(f"No se encontraron clusters válidos para {storm_name}. No se genera figura.")
 
@@ -357,7 +367,7 @@ def grid_search_umbral(tool, data_folder, file_pattern, df_obs, valores_distanci
 
 
 # main #############################################
-def main():
+def main(color_graph):
     dias_previos = 10
     df = pd.read_csv(
         tracks_csv_path,
@@ -379,9 +389,8 @@ def main():
         #obtiene la región de donde proviene la trayectoria ['pacifico', 'atlantico']
         coords = list(zip(df_sid["LAT"], df_sid["LON"]))
         zona = clasificar_region_trayectoria(coords, pacific_prepared, atlantic_prepared)
-        #zona = "atlantico"
-        stitch_dir = os.path.join(stitch_nodes_dir, f"{zona}/nodes_stitch_{zona}")
-        #stitch_dir = f"/mnt/externo8T/HurricaneData/analisis_maps/stitches/{zona}/nodes_stitch"
+        #stitch_dir = os.path.join(stitch_nodes_dir, f"{zona}/nodes_stitch_{zona}")
+        stitch_dir = os.path.join(stitch_nodes_dir, zona)
         
         # extrae el nombre, la fecha de inicio y fin de la tormenta en cuestión
         storm_name = df_sid["NAME"].iloc[0]
@@ -389,8 +398,8 @@ def main():
         end_date = df_sid["ISO_TIME"].max()
 
         #df_sid.set_index("ISO_TIME", inplace=True)  # indexa por tiempo para acelerar los matchs
-        data_umbrales(start_date, end_date, stitch_dir, df_sid, storm_name)
+        data_umbrales(start_date, end_date, stitch_dir, df_sid, storm_name, color_graph)
 
 
 if __name__ == "__main__":
-    main()
+    main(color_graph)
