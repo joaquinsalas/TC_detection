@@ -145,8 +145,17 @@ def generate_test_preds_for_gluon_ensembles(
 
     for seed in range(n_seeds):
         # 1. Split como en entrenamiento
-        _, X_test, _, y_test = split_and_preprocess(
-            df, 'fecha_prediccion', '2023-01-01', '2024-12-31', label, seed
+        _, _, X_test, _, _, y_test = split_and_preprocess(
+            df,
+            date_col   ='fecha_prediccion',
+            train_start='2022-01-01',
+            train_end  ='2023-12-31',
+            val_start  ='2024-01-01',
+            val_end    ='2024-12-31',
+            test_start ='2025-01-01',
+            test_end   ='2025-12-31',
+            label      ='label',
+            seed       =seed
         )
 
         # 2. Selecciona 3 modelos al azar de cada tipo con la misma semilla
@@ -216,8 +225,17 @@ def eval_dir_gluon(base_dir, df, label, zona_split_col=None, n_seeds=30):
         # Métricas por zona (si aplica)
         if zona_split_col is not None:
             # Recupera los índices originales
-            _, X_test_df, _, _ = split_and_preprocess(
-                df, 'fecha_prediccion', '2023-01-01', '2024-12-31', label, seed
+            _, _, X_test_df, _, _, _ = split_and_preprocess(
+                df,
+                date_col='fecha_prediccion',
+                train_start='2022-01-01',
+                train_end='2023-12-31',
+                val_start='2024-01-01',
+                val_end='2024-12-31',
+                test_start='2025-01-01',
+                test_end='2025-12-31',
+                label='label',
+                seed=seed
             )
             zonas_test = df.loc[X_test_df.index, zona_split_col]
             for zona in zones:
@@ -250,10 +268,17 @@ def eval_dir(path, df, label,zona_split_col=None):
             continue
         seed = int(m.group(1))
 
-        _, X_test, _, y_test = split_and_preprocess(
-            df, date_col='fecha_prediccion',
-            train_start='2023-01-01', train_end='2024-12-31',
-            label=label, seed=seed
+        _, _, X_test, _, _, y_test = split_and_preprocess(
+            df,
+            date_col   ='fecha_prediccion',
+            train_start='2022-01-01',
+            train_end  ='2023-12-31',
+            val_start  ='2024-01-01',
+            val_end    ='2024-12-31',
+            test_start ='2025-01-01',
+            test_end   ='2025-12-31',
+            label      ='label',
+            seed       =seed
         )
 
         # Cargar zona para test

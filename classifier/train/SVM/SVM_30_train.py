@@ -8,22 +8,17 @@
 #modificar para que use la cpu en caso de no encontrar GPU
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import pickle
 import numpy as np
 import pandas as pd
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score, average_precision_score, precision_recall_curve, auc
+from sklearn.metrics import roc_auc_score
 import optuna
-from sklearn.model_selection import StratifiedKFold
 from sklearn.svm import SVC
-from classifier.train_common import preprocess, split_and_preprocess, calcula_PR_ascendente, count_dir
+from classifier.train_common import split_and_preprocess, calcula_PR_ascendente, count_dir
+from common import reset_output_paths
 
 def entrenar_modelo_svm(X, y, C, kernel, gamma, class_weight, probability):
     clf = SVC(C=C, kernel=kernel, gamma=gamma, class_weight=class_weight, probability=probability, random_state=0)
@@ -31,23 +26,20 @@ def entrenar_modelo_svm(X, y, C, kernel, gamma, class_weight, probability):
     return clf
 
 # -------------- Optuna Objective -------------
-def objective(trial, X, y, n_folds):
+def objective(trial, X_train, y_train, X_val, y_val):
     C = trial.suggest_loguniform('C', 1e-2, 100)
     kernel = trial.suggest_categorical('kernel', ['rbf', 'linear', 'poly', 'sigmoid'])
     gamma = trial.suggest_loguniform('gamma', 1e-4, 1e-1)
     class_weight = trial.suggest_categorical('class_weight', [None, 'balanced'])
     probability = True  # para poder usar predict_proba
 
-    auc_prs = []
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
-    for train_idx, val_idx in skf.split(X, y):
-        X_tr, X_val = X[train_idx], X[val_idx]
-        y_tr, y_val = y[train_idx], y[val_idx]
-        clf = entrenar_modelo_svm(X_tr, y_tr, C, kernel, gamma, class_weight, probability)
-        probs = clf.predict_proba(X_val)[:, 1]
-        auc_pr, _, _ = calcula_PR_ascendente(y_val, probs)
-        auc_prs.append(auc_pr)
-    return np.mean(auc_prs)
+    clf = entrenar_modelo_svm(
+        X_train, y_train,
+        C, kernel, gamma, class_weight, probability
+    )
+    probs = clf.predict_proba(X_val)[:, 1]
+    auc_pr, _, _ = calcula_PR_ascendente(y_val, probs)
+    return auc_pr
 
 
 # main ------------------------------------------------------------------------
@@ -57,8 +49,7 @@ def main(train_n):
 
     out_dir = "classifier/modelos/SVM"
     best_dir = 'classifier/train/SVM/best'
-    os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(best_dir, exist_ok=True)
+    reset_output_paths(dirs=[out_dir, best_dir])
 
     best_score_pr = -np.inf
     best_model = None
@@ -67,28 +58,40 @@ def main(train_n):
     best_params = None
     best_params_best = None
     params_list = []
-    n_folds = 5
 
     last_seed = count_dir(out_dir)
     seeds_list = list(range(last_seed, train_n))
     for seed in seeds_list:
         print(f"\n=== SEMILLA {seed} ===")
-        X_train, X_test, y_train, y_test = split_and_preprocess(
-            df, 'fecha_prediccion', '2023-01-01', '2024-12-31', 'label', seed
+        # Train-test split
+        X_train, X_val, X_test, y_train, y_val, y_test = split_and_preprocess(
+            df,
+            date_col   ='fecha_prediccion',
+            train_start='2022-01-01',
+            train_end  ='2023-12-31',
+            val_start  ='2024-01-01',
+            val_end    ='2024-12-31',
+            test_start ='2025-01-01',
+            test_end   ='2025-12-31',
+            label      ='label',
+            seed       =seed
         )
 
-        # Escalado (como siempre)
+        # Escalado
         scaler = StandardScaler()
         X_train_np = scaler.fit_transform(X_train)
-        X_test_np  = scaler.transform(X_test)
+        X_val_np  = scaler.transform(X_val)
+        X_test_np = scaler.transform(X_test)
 
-        X_arr = np.array(X_train_np)
-        y_arr = np.array(y_train)
-        # Optuna hyperparameter tuning
+        X_train_arr = np.array(X_train_np)
+        y_train_arr = np.array(y_train)
+        X_val_arr = np.array(X_val_np)
+        y_val_arr = np.array(y_val)
+        # Optuna hyperparameter tuning con validation 2024
         def optuna_objective(trial):
-            return objective(trial, X_arr, y_arr, n_folds)
+            return objective(trial, X_train_arr, y_train_arr, X_val_arr, y_val_arr)
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
-        study.optimize(optuna_objective, n_trials=200, show_progress_bar=True)
+        study.optimize(optuna_objective, n_trials=2000, show_progress_bar=True)
 
         best_params = study.best_params
         print(f"Mejores parámetros Optuna:", best_params)

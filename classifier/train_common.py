@@ -24,20 +24,32 @@ def preprocess(df, label, flag, seed = None):
 #divide los datos de entrenamiento (2023 y 2024) y test (2025) por fecha
 def split_and_preprocess(df: pd.DataFrame, date_col: str,
                          train_start: str, train_end: str,
-                         label: str, seed:int):
+                         val_start: str, val_end: str,
+                         test_start: str, test_end: str,
+                         label: str, seed: int):
     df[date_col] = pd.to_datetime(df[date_col])
 
-    # crear máscara
-    start = pd.to_datetime(train_start)
-    end   = pd.to_datetime(train_end)
-    mask_train = df[date_col].between(start, end)
+    # crear máscaras
+    train_start = pd.to_datetime(train_start)
+    train_end   = pd.to_datetime(train_end)
+    mask_train = df[date_col].between(train_start, train_end)
+    val_start   = pd.to_datetime(val_start)
+    val_end     = pd.to_datetime(val_end)
+    mask_val   = df[date_col].between(val_start, val_end)
+    test_start  = pd.to_datetime(test_start)
+    test_end    = pd.to_datetime(test_end)
+    mask_test  = df[date_col].between(test_start, test_end)
 
     # partir DataFrames
     df_train = df.loc[mask_train].reset_index(drop=True)
-    df_test  = df.loc[~mask_train].reset_index(drop=True)
+    df_val   = df.loc[mask_val].reset_index(drop=True)
+    df_test  = df.loc[mask_test].reset_index(drop=True)
+
+    # Balanncear solo train, dejar tal vcual val y test
     X_train, y_train = preprocess(df_train, label, 'train', seed)
+    X_val,  y_val  = preprocess(df_val,  label, 'test')
     X_test,  y_test  = preprocess(df_test,  label, 'test')
-    return X_train, X_test, y_train, y_test
+    return X_train, X_val, X_test, y_train, y_val, y_test
 
 # Filtra los valores de Precision y Recall para que conforme el Recall dismiya, Precision aumente (y no decaiga)
 def calcula_PR_ascendente(y_true, y_proba):

@@ -2,7 +2,6 @@
 #falta comentar en inglés
 
 import os
-import random
 import glob
 import pickle
 import numpy as np
@@ -11,6 +10,7 @@ import torch
 from autogluon.tabular import TabularPredictor
 from classifier.train.NN.NN_30_train import FlexibleNN
 from classifier.train_common import split_and_preprocess, count_dir
+from common import reset_output_paths
 
 def nn_bundle_predict_proba(nn_bundle, X_test):
     """nn_bundle: dict con keys 'scaler', 'model_state', 'params'."""
@@ -71,6 +71,7 @@ def main(train_n):
     csv_path = "database_creation/confirmed_umbrales_ciclones.csv"
     OUT_DIR = "classifier/modelos/Gluon"
     os.makedirs(OUT_DIR, exist_ok=True)
+    reset_output_paths(dirs=[OUT_DIR])
 
     df = pd.read_csv(csv_path, parse_dates = ['fecha_prediccion'])
 
@@ -81,8 +82,17 @@ def main(train_n):
     seeds_list = list(range(last_seed, train_n))
     for seed in seeds_list:
         print(f"\n=== SEMILLA {seed} ===")
-        X_train, X_test, y_train, y_test = split_and_preprocess(
-            df, 'fecha_prediccion', '2023-01-01', '2024-12-31', 'label', seed
+        X_train, X_val, X_test, y_train, y_val, y_test = split_and_preprocess(
+            df,
+            date_col   ='fecha_prediccion',
+            train_start='2022-01-01',
+            train_end  ='2023-12-31',
+            val_start  ='2024-01-01',
+            val_end    ='2024-12-31',
+            test_start ='2025-01-01',
+            test_end   ='2025-12-31',
+            label      ='label',
+            seed       =seed
         )
 
         # 1. Selecciona 3 modelos de cada tipo al azar
@@ -97,6 +107,7 @@ def main(train_n):
 
         # 2. Genera las features de stacking: proba de cada modelo
         train_preds = pd.DataFrame()
+        val_preds   = pd.DataFrame()
         test_preds  = pd.DataFrame()
         scalers = []
 
@@ -105,11 +116,16 @@ def main(train_n):
                 model_info = pickle.load(pf)
             col_name = f"model_{idx}"
             train_preds[col_name] = predict_with_model(model_info, X_train)
+            val_preds[col_name]   = predict_with_model(model_info, X_val)
             test_preds[col_name]  = predict_with_model(model_info, X_test)
-            scalers.append(model_info['scaler'])
+            if isinstance(model_info, dict) and "scaler" in model_info:
+                scalers.append(model_info["scaler"])
+            else:
+                scalers.append(None)
 
         # Añade la columna objetivo para entrenamiento AutoGluon
         train_preds['label'] = y_train.values
+        val_preds['label'] = y_val.values
         test_preds['label']  = y_test.values
 
         # 3. Entrena el ensamblador (AutoGluon)
@@ -117,8 +133,9 @@ def main(train_n):
         predictor = TabularPredictor(label='label', problem_type='binary', eval_metric='average_precision',
                                     path=save_path).fit(
             train_data=train_preds,
+            tuning_data=val_preds,
             presets="best_quality",
-            time_limit=60*10  # 10 minutos
+            time_limit=3600  # 1 hora
         )
 
         # Evalúa

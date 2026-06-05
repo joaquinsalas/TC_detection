@@ -9,11 +9,10 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 import optuna
-from sklearn.model_selection import StratifiedKFold
 from classifier.train_common import split_and_preprocess, calcula_PR_ascendente, count_dir
+from common import reset_output_paths
 
 # --- Red neuronal en PyTorch ---
 class FlexibleNN(nn.Module):
@@ -84,7 +83,7 @@ def entrenar_modelo(X, y, X_val, y_val, hidden_dims, dropout, activation_name, l
 
 
 # -------------- Optuna Objective -------------
-def objective(trial, X, y,n_folds):
+def objective(trial, X_train, y_train, X_val, y_val):
     n_layers = trial.suggest_int("n_layers", 1, 2)
     hidden_dims = [trial.suggest_int(f"n_units_layer_{i}", 8, 32) for i in range(n_layers)]
     activation_name = trial.suggest_categorical("activation", ["relu", "leakyrelu", "tanh"])
@@ -96,23 +95,17 @@ def objective(trial, X, y,n_folds):
     max_epochs = 200
     
     # Cross-validation
-    auc_prs = []
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
-    for train_idx, val_idx in skf.split(X, y):
-        X_tr, X_val = X[train_idx], X[val_idx]
-        y_tr, y_val = y[train_idx], y[val_idx]
-        model, X_val_t = entrenar_modelo(
-            X_tr, y_tr, X_val, y_val, hidden_dims, dropout, activation_name,
-            lr, batch_size, max_epochs, anneal_strategy, weight_decay
-        )
+    model, X_val_t = entrenar_modelo(
+        X_train, y_train, X_val, y_val, hidden_dims, dropout, activation_name,
+        lr, batch_size, max_epochs, anneal_strategy, weight_decay
+    )
 
-        device = next(model.parameters()).device  # detecta si está en cuda o cpu
-        with torch.no_grad():
-            logits = model(torch.tensor(X_val_t, dtype=torch.float32).to(device))
-            probs = torch.sigmoid(logits).cpu().numpy().flatten()
-        auc_pr, _, _ = calcula_PR_ascendente(y_val, probs)
-        auc_prs.append(auc_pr)
-    return np.mean(auc_prs)
+    device = next(model.parameters()).device  # detecta si está en cuda o cpu
+    with torch.no_grad():
+        logits = model(torch.tensor(X_val_t, dtype=torch.float32).to(device))
+        probs = torch.sigmoid(logits).cpu().numpy().flatten()
+    auc_pr, _, _ = calcula_PR_ascendente(y_val, probs)
+    return auc_pr
 
 
 # main ------------------------------------------------------------------------
@@ -122,8 +115,7 @@ def main(train_n):
 
     out_dir = "classifier/modelos/NN"
     best_dir = 'classifier/train/NN/best'
-    os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(best_dir, exist_ok=True)
+    reset_output_paths(dirs=[out_dir, best_dir])
     
 
     best_score_pr = -np.inf
@@ -133,32 +125,39 @@ def main(train_n):
     best_params = None
     best_params_best = None
     params_list = []
-    n_folds = 5
-
 
     last_seed = count_dir(out_dir)
     seeds_list = list(range(last_seed, train_n))
     for seed in seeds_list:
         print(f"\n=== SEMILLA {seed} ===")
-        X_train, X_test, y_train, y_test = split_and_preprocess(
-            df, 'fecha_prediccion', '2023-01-01', '2024-12-31', 'label', seed
+        X_train, X_val, X_test, y_train, y_val, y_test = split_and_preprocess(
+            df,
+            date_col   ='fecha_prediccion',
+            train_start='2022-01-01',
+            train_end  ='2023-12-31',
+            val_start  ='2024-01-01',
+            val_end    ='2024-12-31',
+            test_start ='2025-01-01',
+            test_end   ='2025-12-31',
+            label      ='label',
+            seed       =seed
         )
 
-        # Escalado (como siempre)
+        # Escalado
         scaler = StandardScaler()
         X_train_np = scaler.fit_transform(X_train)
-        X_test_np  = scaler.transform(X_test)
+        X_val_np  = scaler.transform(X_val)
+        X_test_np = scaler.transform(X_test)
 
-        # Split interno para validación (usada por Optuna)
-        X_tr, X_val, y_tr, y_val = train_test_split(X_train_np, y_train, test_size=0.2, stratify=y_train, random_state=seed)
-
-        X_arr = np.array(X_train_np)
-        y_arr = np.array(y_train)
+        X_train_arr = np.array(X_train_np)
+        y_train_arr = np.array(y_train)
+        X_val_arr = np.array(X_val_np)
+        y_val_arr = np.array(y_val)
         # Optuna hyperparameter tuning
         def optuna_objective(trial):
-            return objective(trial, X_arr, y_arr, n_folds)
+            return objective(trial, X_train_arr, y_train_arr, X_val_arr, y_val_arr)
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
-        study.optimize(optuna_objective, n_trials=100, show_progress_bar=True)
+        study.optimize(optuna_objective, n_trials=500, show_progress_bar=True)
 
         best_params = study.best_params
         print(f"Mejores parámetros Optuna:", best_params)
@@ -178,9 +177,9 @@ def main(train_n):
         batch_size = best_params['batch_size']
         anneal_strategy = best_params['anneal_strategy']
         weight_decay = best_params['weight_decay']
-        max_epochs = 200
+        max_epochs = 2000
 
-        final_model, _ = entrenar_modelo(X_train_np, y_train, X_val, y_val, hidden_dims, dropout, activation_name, lr, batch_size, max_epochs, anneal_strategy, weight_decay)
+        final_model, _ = entrenar_modelo(X_train_np, y_train, X_val_np, y_val, hidden_dims, dropout, activation_name, lr, batch_size, max_epochs, anneal_strategy, weight_decay)
         ####################################
 
 
