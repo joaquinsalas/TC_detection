@@ -18,11 +18,25 @@ from matplotlib.dates import num2date
 from database_creation.config import stitch_nodes_dir
 import geopandas as gpd
 from shapely.prepared import prep
+from config import valores_distancia, valores_min_n
 
 base_dir= 'database_creation'
 umbrales_csv_path= os.path.join(base_dir, 'umbrales_ciclones.csv')
 sid_txt_path = os.path.join(base_dir, 'best_tcs/TC_names_inside.txt')
 tracks_csv_path = os.path.join(base_dir, 'data/ibtracs.ALL.list.v04r01.csv')
+
+UMBRALES_COLUMNS = [
+    "SID",
+    "NAME",
+    "ISO_TIME",
+    "distancia_enlace_km",
+    "min_trayectorias_por_cluster",
+    "error_promedio_km",
+    "n_trayectorias_best_cluster",
+    "dispersión_km_best_cluster",
+    "USA_SSHS",
+    "fecha_inicio",
+]
 
 #carga los polígnos para cada área
 pacific_gdf = gpd.read_file("database_creation/data/shp_files/pacifico_shp/pacifico_shp.shp")
@@ -32,10 +46,48 @@ atlantic_geom = atlantic_gdf.unary_union
 pacific_prepared = prep(pacific_geom)
 atlantic_prepared = prep(atlantic_geom)
 
-# grid:
-valores_distancia = [400, 300, 200, 100, 50]
-valores_min_n = [5, 10, 15, 20, 30, 40]
 
+def ensure_umbrales_csv():
+    """
+    Crea el archivo CSV con encabezados si no existe o está vacío.
+    """
+    if not os.path.exists(umbrales_csv_path) or os.path.getsize(umbrales_csv_path) == 0:
+        pd.DataFrame(columns=UMBRALES_COLUMNS).to_csv(umbrales_csv_path, index=False)
+
+
+def load_processed_keys():
+    """
+    Carga los pares (SID, ISO_TIME) que ya existen en umbrales_ciclones.csv.
+    Esto permite saltar timestamps ya procesados.
+    """
+    ensure_umbrales_csv()
+
+    try:
+        df_done = pd.read_csv(
+            umbrales_csv_path,
+            usecols=["SID", "ISO_TIME"],
+            dtype={"SID": str, "ISO_TIME": str},
+        )
+    except pd.errors.EmptyDataError:
+        return set()
+
+    df_done = df_done.dropna(subset=["SID", "ISO_TIME"])
+
+    return set(zip(df_done["SID"].astype(str), df_done["ISO_TIME"].astype(str)))
+
+
+def append_umbral_row(row):
+    """
+    Agrega un solo registro al CSV inmediatamente.
+    """
+    ensure_umbrales_csv()
+
+    pd.DataFrame([row], columns=UMBRALES_COLUMNS).to_csv(
+        umbrales_csv_path,
+        mode="a",
+        header=False,
+        index=False,
+    )
 
 # graficar todas las estadísticas en un gráfico
 def plot_evolucion(df_stats, storm_name, fecha_inicio, color_graph):
@@ -209,8 +261,8 @@ def get_clusters(current, storm_name, cont, stitch_dir, df):
 #   si es así, añade 1 un contador
 #   al final debe decir 'en el ensamble del día_hora se encontraron n coincidencias con uno de los puntos de dalila
 
-def data_umbrales(start_date, end_date, stitch_dir, df, storm_name, color_graph):
-    umbrales_list = []
+def data_umbrales(start_date, end_date, stitch_dir, df, storm_name, color_graph, processed_keys):
+    #umbrales_list = []
     TIME_STEP = timedelta(hours=6)
 
     # revisa los paquetes de 50 stitchnodes cada 6 horas y busca coincidencias espaciotemporales
@@ -219,8 +271,15 @@ def data_umbrales(start_date, end_date, stitch_dir, df, storm_name, color_graph)
     cont = 0
     while current <= end_date:
         cont += 1
-        #run_hr = f"{current.hour:02d}"
-        #key = f"{current:%Y%m%d}_{run_hr}"
+
+        storm_sid = str(df["SID"].iloc[0])
+        current_str = current.strftime("%Y-%m-%d %H:%M:%S")
+        key = (storm_sid, current_str)
+
+        if key in processed_keys:
+            print(f"Saltando registro ya procesado: SID={storm_sid}, ISO_TIME={current_str}")
+            current += TIME_STEP
+            continue
 
         # ---------------------------------------------------------------------
         # Los matches espaciales se harán de acuerdo a la separación de clusters de Yael
@@ -244,47 +303,48 @@ def data_umbrales(start_date, end_date, stitch_dir, df, storm_name, color_graph)
                 usa_ssh_value = df[mask]["USA_SSHS"].iloc[0]
             else:
                 usa_ssh_value = np.nan
-            #label = 1 if pd.notna(usa_ssh_value) and usa_ssh_value >= 0 else 0
 
-            #si es que no se encontró un cluster cuyas fehcas iniciales emepzaran en el intervalo de tiempo que duró el ciclón, se dejan los campos en blanco
-            if best_error is None or np.isnan(best_error):
-                d, min_n, n_trayectorias_best_cluster, dispersión_km_best_cluster, usa_ssh_value, fecha_inicio = (np.nan, np.nan, np.nan, np.nan, np.nan, None)
+        #si es que no se encontró un cluster cuyas fehcas iniciales emepzaran en el intervalo de tiempo que duró el ciclón, 
+        #o no se formó ningún cluster válido (menos de 5 trayectorias))
+        # se dejan los campos en blanco
+        if best_error is None or np.isnan(best_error) or np.isinf(best_error):
+            d, min_n, n_trayectorias_best_cluster, dispersión_km_best_cluster, usa_ssh_value, fecha_inicio, best_error = (np.nan, np.nan, np.nan, np.nan, np.nan, None, np.nan)
 
-            umbrales_list.append({
-                "SID": storm_sid,
-                "NAME": storm_name,
-                "ISO_TIME": current.strftime("%Y-%m-%d %H:%M:%S"),
-                "distancia_enlace_km": d,
-                "min_trayectorias_por_cluster": min_n,
-                "error_promedio_km": round(best_error, 2),
-                "n_trayectorias_best_cluster": n_trayectorias_best_cluster,
-                "dispersión_km_best_cluster": dispersión_km_best_cluster,
-                "USA_SSHS": usa_ssh_value,
-                #"label": label,
-                "fecha_inicio": fecha_inicio # Fecha pronosticada de inicio del evento (fecha de inicio de una de las trayectorias del best_cluster)
-            })
+        row ={
+            "SID": storm_sid,
+            "NAME": storm_name,
+            "ISO_TIME": current.strftime("%Y-%m-%d %H:%M:%S"),
+            "distancia_enlace_km": d,
+            "min_trayectorias_por_cluster": min_n,
+            "error_promedio_km": round(best_error, 2),
+            "n_trayectorias_best_cluster": n_trayectorias_best_cluster,
+            "dispersión_km_best_cluster": dispersión_km_best_cluster,
+            "USA_SSHS": usa_ssh_value,
+            #"label": label,
+            "fecha_inicio": fecha_inicio.strftime("%Y-%m-%d %H:%M:%S") # Fecha pronosticada de inicio del evento (fecha de inicio de una de las trayectorias del best_cluster)
+        }
+        append_umbral_row(row)
+        processed_keys.add(key)
+        print(f"Registro guardado: SID={storm_sid}, ISO_TIME={current_str}")
 
-            # Obtener estadísticas del cluster ganador
-            #print(f"Nº de trayectorias: {stats['n_trajs']}")
-            #print(f"Dispersión inicios (km): {stats['start_dispersion_km']:.2f}")
-            stats_list.append(
-                {
-                    "date": current,
-                    "n_trajs": n_trayectorias_best_cluster,
-                    "start_dispersion_km": dispersión_km_best_cluster,
-                }
-            )
+        # Obtener estadísticas del cluster ganador
+        #print(f"Nº de trayectorias: {stats['n_trajs']}")
+        #print(f"Dispersión inicios (km): {stats['start_dispersion_km']:.2f}")
+        stats_list.append(
+            {
+                "date": current,
+                "n_trajs": n_trayectorias_best_cluster,
+                "start_dispersion_km": dispersión_km_best_cluster,
+            }
+        )
         current += TIME_STEP
 
-    #guardar los umbrales por timestamp deuna sola tormenta
+    """#guardar los umbrales por timestamp deuna sola tormenta
     if umbrales_list:
         df_out = pd.DataFrame(umbrales_list)
 
         if not os.path.exists(umbrales_csv_path) or os.path.getsize(umbrales_csv_path) == 0:
-            pd.DataFrame(columns=[
-                "SID", "NAME", "ISO_TIME",
-                "distancia_enlace_km", "min_trayectorias_por_cluster", "error_promedio_km", "n_trayectorias_best_cluster", "dispersión_km_best_cluster", "USA_SSHS", "fecha_inicio"
-            ]).to_csv(umbrales_csv_path, index=False)
+            pd.DataFrame(columns=UMBRALES_COLUMNS).to_csv(umbrales_csv_path, index=False)
 
         if os.path.exists(umbrales_csv_path):
             df_existente = pd.read_csv(umbrales_csv_path)
@@ -294,7 +354,7 @@ def data_umbrales(start_date, end_date, stitch_dir, df, storm_name, color_graph)
             df_out.drop_duplicates(subset=["SID", "ISO_TIME"], keep="last", inplace=True)
 
         df_out.to_csv(umbrales_csv_path, index=False)
-        print(f"Se guardaron {len(umbrales_list)} registros de umbrales en {umbrales_csv_path}")
+        print(f"Se guardaron {len(umbrales_list)} registros de umbrales en {umbrales_csv_path}")"""
 
     # generar un dataframe de stats para graficar
     df_stats = pd.DataFrame(stats_list)
@@ -306,7 +366,7 @@ def data_umbrales(start_date, end_date, stitch_dir, df, storm_name, color_graph)
     else:
         print(f"No se encontraron clusters válidos para {storm_name}. No se genera figura.")
 
-
+#aqui tambien se saca la cantidad de clusters que hay y las trayectorias que los componen
 def grid_search_umbral(tool, data_folder, file_pattern, df_obs, valores_distancia, valores_min_n):
     best_params = None
     best_error = np.inf
@@ -316,7 +376,7 @@ def grid_search_umbral(tool, data_folder, file_pattern, df_obs, valores_distanci
     for d in valores_distancia:
         for min_n in valores_min_n:
             try:
-                results = tool.cluster_tcs(
+                results = tool.cluster_tcs( #regresa las trayectorias y el id del cluster al que pertenecen cada una
                     folder=data_folder,
                     pattern=file_pattern,
                     link_tol_km=d,
@@ -337,9 +397,8 @@ def grid_search_umbral(tool, data_folder, file_pattern, df_obs, valores_distanci
                     tool._mean_error_traj_vs_obs_filtered(traj, df_obs)
                     for traj in cluster_trajs
                 ]
-                #aqui es donde aparece el error
-                mean_error = np.mean([e for e in errors if np.isfinite(e)]) # errors puede ser una lista de inf
-                
+                #si el lcuster enocntrado no tiene trayectorias que coincidan con las fechas del evento real, errors será una lista de infs
+                mean_error = np.mean([e for e in errors if np.isfinite(e)])
 
                 # NUEVO: criterio de desempate cuando mean_error == best_error
                 is_better = False
@@ -369,6 +428,9 @@ def grid_search_umbral(tool, data_folder, file_pattern, df_obs, valores_distanci
 # main #############################################
 def main(color_graph):
     dias_previos = 10
+    processed_keys = load_processed_keys()
+    print(f"Registros ya existentes en la base: {len(processed_keys)}")
+
     df = pd.read_csv(
         tracks_csv_path,
         usecols=["NAME", "ISO_TIME", "LAT", "LON", "SID", "USA_SSHS"],
@@ -398,8 +460,9 @@ def main(color_graph):
         end_date = df_sid["ISO_TIME"].max()
 
         #df_sid.set_index("ISO_TIME", inplace=True)  # indexa por tiempo para acelerar los matchs
-        data_umbrales(start_date, end_date, stitch_dir, df_sid, storm_name, color_graph)
+        data_umbrales(start_date, end_date, stitch_dir, df_sid, storm_name, color_graph, processed_keys)
 
 
 if __name__ == "__main__":
+    color_graph = 'white' # 'black' o 'white'
     main(color_graph)

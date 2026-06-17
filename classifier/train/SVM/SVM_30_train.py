@@ -91,7 +91,7 @@ def main(train_n):
         def optuna_objective(trial):
             return objective(trial, X_train_arr, y_train_arr, X_val_arr, y_val_arr)
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
-        study.optimize(optuna_objective, n_trials=2000, show_progress_bar=True)
+        study.optimize(optuna_objective, n_trials=500, show_progress_bar=True)
 
         best_params = study.best_params
         print(f"Mejores parámetros Optuna:", best_params)

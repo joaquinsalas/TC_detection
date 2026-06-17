@@ -16,7 +16,7 @@ def main():
     })
 
     # Leer el archivo CSV
-    path = 'database_creation/confirmed_umbrales_ciclones.csv'
+    path = 'database_creation/confirmed_umbrales_ciclones_old.csv'
     df = pd.read_csv(path, parse_dates = ['fecha_prediccion']) 
     # ------------------------------------------------------------------------------------
     labels = ['label'] 
@@ -39,6 +39,16 @@ def main():
         ax.yaxis._axinfo["grid"]['color'] = "gray"
         ax.zaxis._axinfo["grid"]['color'] = "gray"
 
+        # Graficar puntos con label 0 (rojo)
+        df_negativos = df[df[label] == 0]
+        ax.scatter(
+            df_negativos["dispersión_km_best_cluster"],
+            df_negativos["n_trayectorias_best_cluster"],
+            df_negativos["horas_diff_estimadas"],
+            color="red",
+            alpha=0.4,   # <-- transparencia
+            label=r"Non-tropical storm"
+        )
 
         # Graficar puntos con label 1 (verde)
         df_positivos = df[df[label] == 1]
@@ -49,17 +59,6 @@ def main():
             color="green",
             alpha=0.4,   # <-- transparencia
             label=r"Tropical storm"
-        )
-
-        # Graficar puntos con label 0 (rojo)
-        df_negativos = df[df[label] == 0]
-        ax.scatter(
-            df_negativos["dispersión_km_best_cluster"],
-            df_negativos["n_trayectorias_best_cluster"],
-            df_negativos["horas_diff_estimadas"],
-            color="red",
-            alpha=0.4,   # <-- transparencia
-            label=r"Non-tropical storm"
         )
 
         # Etiquetas y título

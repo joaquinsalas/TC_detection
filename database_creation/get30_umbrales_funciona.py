@@ -13,20 +13,14 @@
 import pandas as pd
 #from XGBoost import add_labels
 import matplotlib.pyplot as plt
-import numpy as np
-import os
 import seaborn as sns
 from database_creation.best_tcs.best_tcs import clasificar_region_trayectoria
 import geopandas as gpd
-from shapely.geometry import Point
 from shapely.prepared import prep
 from common import reset_output_paths
+from config import valores_distancia, valores_min_n
 
 plt.style.use("dark_background")
-# 2. Definir los valores de umbrales que nos interesan
-dist_vals = [400, 300, 200, 100, 50]
-min_vals = [5, 10, 15, 20, 30, 40]
-
 
 def identifica_zona(df, df_ibtracs):
     #carga los polígnos para cada área
@@ -123,6 +117,16 @@ def limpiar_archivo_umbrales(path, output_path):
     df = add_labels(df)
     df = df.rename(columns={'ISO_TIME': 'fecha_prediccion', "fecha_inicio": "fecha_estimada_de_inicio","distancia_enlace_km": "umbral_distancia_enlace_km", "min_trayectorias_por_cluster": "umbral_min_trayectorias_por_cluster", "confirmed": "label"})
 
+    # Asegurar que las columnas de fechas sean datetime después del rename
+    date_cols = [
+        "fecha_prediccion",
+        "fecha_estimada_de_inicio",
+        "inicio_oficial"
+    ]
+    for col in date_cols:
+        df[col] = pd.to_datetime(df[col], errors="coerce")
+
+
     # Calcular la cantidad de horas reales entre la fecha de predicción y a fecha en que de verdad inició el ciclón
     df["horas_diff_reales"] = (df["fecha_prediccion"] - df["inicio_oficial"]).dt.total_seconds() / 3600.0
 
@@ -151,8 +155,8 @@ def main():
     col_horas_diff = 'horas_diff_estimadas' # diferencia de horas que aparecerán en el eje X
     # 3. Filtrar el dataframe a las combinaciones deseadas
     df = df[
-        df['umbral_distancia_enlace_km'].isin(dist_vals) &
-        df['umbral_min_trayectorias_por_cluster'].isin(min_vals)
+        df['umbral_distancia_enlace_km'].isin(valores_distancia) &
+        df['umbral_min_trayectorias_por_cluster'].isin(valores_min_n)
     ]
 
     # 4. Crear una etiqueta única para cada pareja de umbrales
@@ -172,9 +176,9 @@ def main():
     heatmap_data = group.pivot(index='umbral_combo', columns=col_horas_diff, values='pct')
 
     # 7. Ordenar filas y columnas si se desea
-    #    (por ejemplo, ordenar horas_diff de menor a mayor y combos en el orden de dist_vals/min_vals)
+    #    (por ejemplo, ordenar horas_diff de menor a mayor y combos en el orden de valores_distancia/valores_min_n)
     heatmap_data = heatmap_data.reindex(
-        index=[f"{d} km, {m} traj." for m in min_vals for d in dist_vals],
+        index=[f"{d} km, {m} traj." for m in valores_min_n for d in valores_distancia],
         columns=sorted(heatmap_data.columns)
     )
 

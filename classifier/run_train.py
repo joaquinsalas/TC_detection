@@ -25,10 +25,10 @@ def main():
     print("==============================\n")
     run_xgb(train_n)"""
 
-    """print("\n==============================")
+    print("\n==============================")
     print("Entrenando clasificadores SVM")
     print("==============================\n")
-    run_svm(train_n)"""
+    run_svm(train_n)
 
     print("\n==============================")
     print("Entrenando clasificadores NN")

@@ -135,7 +135,9 @@ def main(train_n):
             train_data=train_preds,
             tuning_data=val_preds,
             presets="best_quality",
-            time_limit=3600  # 1 hora
+            time_limit=3600,  # 1 hora
+            use_bag_holdout=True,
+            num_gpus=1
         )
 
         # Evalúa

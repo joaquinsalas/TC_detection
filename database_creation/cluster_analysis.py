@@ -9,16 +9,16 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import dates as mdates
-from mpl_toolkits.mplot3d import Axes3D
+#from mpl_toolkits.mplot3d import Axes3D
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import squareform
 from datetime import datetime
-import datetime as _dt
+#import datetime as _dt
 import shutil
 from collections import defaultdict
-import pandas as pd
+#import pandas as pd
 from collections import defaultdict
-from math import radians, sin, cos, sqrt, atan2
+#from math import radians, sin, cos, sqrt, atan2
 import scipy.io
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
@@ -142,9 +142,9 @@ class ClusterTCStitchNodes:
         Devuelve {'trajectories': final_traj, 'clusters': final_clusters}.
         """
         n_traj = len(all_traj)
-        if n_traj < 2:
-            # print("Advertencia: Menos de dos trayectorias para comparar.")
-            return {"trajectories": all_traj, "clusters": np.arange(1, n_traj + 1)}
+        if n_traj < min_n:
+            # No se pueden hacer formar clusters cuando el num de trayectorias totales es menos al mínimo establecido
+            return {"trajectories": [], "clusters": []}
 
         # print("Calculando matriz de distancias entre trayectorias...")
         dist_matrix = np.zeros((n_traj, n_traj))
@@ -165,28 +165,22 @@ class ClusterTCStitchNodes:
 
         # print("Realizando clustering jerárquico...")
         condensed = squareform(dist_matrix)
-        Z = linkage(condensed, method="single")
+        Z = linkage(condensed, method="average")
         raw_clusters = fcluster(Z, t=link_tol_km, criterion="distance")
 
         unique_lbls, counts = np.unique(raw_clusters, return_counts=True)
-        valid = unique_lbls[counts >= min_n]
+        valid = unique_lbls[counts >= min_n] #guarda el id de los clusters validos
         label_map = {old: new for new, old in enumerate(valid, start=1)}
 
         final_traj = []
         final_clusters = []
-        for idx, traj in enumerate(all_traj):
+        for idx, traj in enumerate(all_traj): #guarda en final_traj solo las trajectorias pertenecientes a los clusteres válidos
             lbl = raw_clusters[idx]
             if lbl in label_map:
                 final_traj.append(traj)
-                final_clusters.append(label_map[lbl])
-
-        if not final_traj:
-            # print("No se conservaron clústeres con el tamaño mínimo.")
-            return {"trajectories": [], "clusters": []}
+                final_clusters.append(label_map[lbl]) #les da un nuevo id. Es decir, indica que la trayectoria agregada va a ser parte del cluster n, y se repite n veces como haya de trayectorias en el cluster
 
         final_clusters = np.array(final_clusters)
-        # print(f"Trayectorias conservadas: {len(final_traj)}")
-        # print(f"Clústeres conservados: {len(label_map)} (min_n={min_n})")
         return {"trajectories": final_traj, "clusters": final_clusters}
 
     def _read_stitch_file(self, fname, file_id):

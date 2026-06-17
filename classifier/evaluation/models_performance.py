@@ -449,9 +449,9 @@ def main(color_graph):
 
     
     types = {"XGB": os.path.join(base, "XGB"),
-             "NN" : os.path.join(base, "NN"),
-             "SVM": os.path.join(base, "SVM"),
-             "Gluon": os.path.join(base, "Gluon")
+             #"NN" : os.path.join(base, "NN"),
+             #"SVM": os.path.join(base, "SVM"),
+             #"Gluon": os.path.join(base, "Gluon")
              }
     zona_split_col = 'zona'
     dataframes=[]
