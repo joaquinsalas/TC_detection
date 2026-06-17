@@ -44,8 +44,17 @@ def generate_test_preds_for_gluon_ensembles(
     for seed in range(n_seeds):
         print(f"\n=== SEMILLA {seed} ===")
         # 1. Split como en entrenamiento
-        _, X_test, _, y_test = split_and_preprocess(
-            df, 'fecha_prediccion', '2023-01-01', '2024-12-31', label, seed
+        _, _, X_test, _, _, y_test = split_and_preprocess(
+            df,
+            date_col   ='fecha_prediccion',
+            train_start='2022-01-01',
+            train_end  ='2023-12-31',
+            val_start  ='2024-01-01',
+            val_end    ='2024-12-31',
+            test_start ='2025-01-01',
+            test_end   ='2025-12-31',
+            label      ='label',
+            seed       =seed
         )
 
         # 2. Selecciona 3 modelos al azar de cada tipo con la misma semilla

@@ -19,11 +19,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
 import scipy.stats as stats
 from sklearn.pipeline import Pipeline
 import os
 from classifier.train_common import split_and_preprocess, calcula_PR_ascendente, count_dir
+from common import reset_output_paths
 
 #definición de métodos
 def build_pipeline(random_state=42):
@@ -38,36 +39,29 @@ def build_pipeline(random_state=42):
     ])
     return pipe
 
-def refit_with_early_stopping(best_params, X_train, y_train, random_state):
-    # 1) Construye el pipeline y aplica los mejores params
+def refit_with_early_stopping(best_params, X_train, y_train, X_val, y_val, random_state):
+    # Construye el pipeline y aplica los mejores params
     pipe = build_pipeline(random_state=random_state).set_params(**best_params)
 
-    # 2) Split interno para early stopping
-    X_tr, X_val, y_tr, y_val = train_test_split(
-        X_train, y_train, test_size=0.2, stratify=y_train, random_state=random_state
-    )
-
-    # 3) Fit SOLO el scaler con train y transforma train/val
     scaler = pipe.named_steps["scaler"]
     xgb    = pipe.named_steps["xgb"]
+    #Transformar train y validation con el mismo scaler
+    scaler.fit(X_train)
+    X_train_s = scaler.transform(X_train)
+    X_val_s   = scaler.transform(X_val)
 
-    scaler.fit(X_tr)                    # <- evita fuga de datos
-    X_tr_s  = scaler.transform(X_tr)
-    X_val_s = scaler.transform(X_val)
-
-    # 4) Early stopping en el estimador (ponlo como parámetro, no en fit, para evitar el warning)
-    xgb.set_params(n_estimators=2000, early_stopping_rounds=10)  # grande; se detiene solo #antes era un 100
+    # Entrenar XGB usando validation 2024 para early stopping
+    xgb.set_params(n_estimators=2000, early_stopping_rounds=10)
     xgb.fit(
-        X_tr_s, y_tr,
+        X_train_s, y_train,
         eval_set=[(X_val_s, y_val)],
         verbose=False
     )
-
-    # 5) Devuelve el pipeline con scaler y xgb YA entrenados
+    # Devuelve el pipeline con scaler y xgb ya entrenados
     return pipe
 
 
-def tune_with_random(X_train, y_train, random_state):
+def tune_with_random(X_train, y_train, X_val, y_val, random_state):
     pipe = build_pipeline(random_state=random_state)
     param_dist = {
         'xgb__n_estimators':      stats.randint(50, 300),
@@ -79,20 +73,31 @@ def tune_with_random(X_train, y_train, random_state):
         "xgb__reg_lambda":        stats.uniform(1.0, 5.0),
     }
     
+    # Juntar train + validation solo para que PredefinedSplit sepa
+    # qué filas son train y cuáles son validation.
+    X_search = pd.concat([X_train, X_val], axis=0).reset_index(drop=True)
+    y_search = pd.concat([y_train, y_val], axis=0).reset_index(drop=True)
+
+    # -1 = siempre entrenamiento
+    #  0 = validation fold
+    test_fold = [-1] * len(X_train) + [0] * len(X_val)
+    ps = PredefinedSplit(test_fold=test_fold)
+
     rand = RandomizedSearchCV(
         estimator           = pipe,
         param_distributions = param_dist,
-        n_iter              = 200,
+        n_iter              = 2000,
         scoring             = "average_precision", #'roc_auc'
-        cv                  = 10,
+        cv                  = ps,
         verbose             = 1,
         n_jobs              = -1,
-        random_state        = random_state
+        random_state        = random_state,
+        refit=False
     )
-    rand.fit(X_train, y_train)
-    print("Mejor AUC (train CV):", rand.best_score_)
+    rand.fit(X_search, y_search)
+    print("Mejor AUC-PR en validation 2024:", rand.best_score_)
     print("Mejores parámetros:", rand.best_params_)
-    return rand.best_estimator_, rand.best_params_
+    return rand.best_params_
 
 # main ------------------------------------------------------------------------
 def main(train_n):
@@ -102,8 +107,7 @@ def main(train_n):
 
     out_dir = "classifier/modelos/XGB"
     best_dir = 'classifier/train/XGB/best'
-    os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(best_dir, exist_ok=True)
+    reset_output_paths(dirs=[out_dir, best_dir])
 
     # el clasificador se entrena 30 veces con particiones difeerentes y nos quedamos con el mejor
     records = []            # para acumular resultados
@@ -116,18 +120,23 @@ def main(train_n):
     seeds_list = list(range(last_seed, train_n))
     for seed in seeds_list:
         # Train-test split
-        X_train, X_test, y_train, y_test = split_and_preprocess(
+        X_train, X_val, X_test, y_train, y_val, y_test = split_and_preprocess(
             df,
-            date_col='fecha_prediccion',
-            train_start='2023-01-01',
-            train_end  ='2024-12-31',
-            label='label',
-            seed = seed
+            date_col   ='fecha_prediccion',
+            train_start='2022-01-01',
+            train_end  ='2023-12-31',
+            val_start  ='2024-01-01',
+            val_end    ='2024-12-31',
+            test_start ='2025-01-01',
+            test_end   ='2025-12-31',
+            label      ='label',
+            seed       =seed
         )
 
-        # 2) Optimización de hiperparámetros
-        _, params = tune_with_random(X_train, y_train, seed)
-        clf = refit_with_early_stopping(params, X_train, y_train, seed)
+        # Optimización de hiperparámetros
+        params = tune_with_random(X_train, y_train, X_val, y_val, seed)
+        # Entrenamiento final
+        clf = refit_with_early_stopping(params, X_train, y_train, X_val, y_val, seed)
 
         #guarda los clasificadores
         with open(os.path.join(out_dir, f'XGB_classifier_seed_{seed}.pkl'), "wb") as f:
@@ -149,8 +158,6 @@ def main(train_n):
         record = {'seed': seed, 'auc_roc': auc_roc, 'auc_pr': auc_pr}
         record.update(params)  # añade los hiperparámetros
         records.append(record)
-
-     # 3) Guardar resumen general en Excel
 
     # 4) Guardar mejor clasificador
     if best_seed is not None:

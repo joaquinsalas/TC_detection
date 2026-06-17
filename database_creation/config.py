@@ -4,3 +4,7 @@ stitch_nodes_dir = '/mnt/hurakan-frontend/hurakan/data/nodes_stitch/'
 # Period of time for downloadgin test database
 start_download_date = "2022-01-01" #"2023-10-01" 
 stop_download_date = "2025-12-31" #"2025-07-05"
+
+# grid:
+valores_distancia = [600, 500, 400, 300, 200, 100, 50, 25]
+valores_min_n = [5, 10, 15, 20, 30, 40]

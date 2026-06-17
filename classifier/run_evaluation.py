@@ -37,11 +37,11 @@ def main():
     run_more_results(color_graph, lead_time=lead_time)
     #del general, model=1 fue el mejor (en este caso se refiere a NN=20)"""
 
-    print("\n==============================")
+    """print("\n==============================")
     print("Calculando z_score de AUC-ROC Y AUC-PR con α = 0.05")
     print("==============================\n")
     run_z_score(results)
-
+    """
 
 
 

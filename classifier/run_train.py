@@ -20,10 +20,10 @@ def main():
 
     warnings.filterwarnings("ignore", category=UserWarning)
     
-    print("\n==============================")
+    """print("\n==============================")
     print("Entrenando clasificadores XGBoost")
     print("==============================\n")
-    run_xgb(train_n)
+    run_xgb(train_n)"""
 
     print("\n==============================")
     print("Entrenando clasificadores SVM")
@@ -44,7 +44,7 @@ def main():
     print("ENTRENAMIENTO COMPLETO, EMPIEZA EXTRACCIÓN DLE MEJOR ENSAMBLE")
     print("==============================\n")
     run_extract(train_n)
-
+    
 
 if __name__ == "__main__":
     main()

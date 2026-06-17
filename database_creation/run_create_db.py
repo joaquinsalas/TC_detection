@@ -16,7 +16,7 @@ def main():
     color_graph = 'white'
     warnings.filterwarnings("ignore", category=UserWarning)
 
-    """print("\n==============================")
+    print("\n==============================")
     print("Generando la lista de nombres y de fechas a estudiar")
     print("==============================\n")
     run_dates_and_names()
@@ -29,7 +29,7 @@ def main():
     print("\n==============================")
     print("Limpia la base de datos ")
     print("==============================\n")
-    clean_db()"""
+    clean_db()
     
     print("\n==============================")
     print("Visualiza base de datos ")
